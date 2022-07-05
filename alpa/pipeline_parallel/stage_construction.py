@@ -510,28 +510,6 @@ def get_compute_cost(
     return compute_cost, max_n_succ_stages
 
 
-@dataclass
-class HostSlice:
-    """Specifications of one slice of the virtual mesh."""
-    # Host ID
-    host_id: int
-    # The set of devices to select on the host.
-    device_ids: Sequence[int]
-
-
-@dataclass
-class VirtualSubmeshSpec:
-    """Specifications of one slice of the virtual mesh."""
-
-
-@dataclass
-class ManualMeshSlicingSpec:
-    """Specifications of how the virtual mesh is sliced."""
-    # A list of submesh specification.
-    # Its length should equal to the number of pipeline stages.
-    virtual_submeshes: Sequence[VirtualSubmeshSpec]
-
-
 def get_custom_sliced_virtual_submeshes(
     virtual_mesh,
     submesh_physical_specs: Sequence[Tuple[Sequence[int],
