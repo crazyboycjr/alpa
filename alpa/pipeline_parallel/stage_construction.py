@@ -61,6 +61,15 @@ class ManualStageOption:
     submesh_logical_shapes: Sequence[Sequence[int]]
     # The auto-sharding options of each stage.
     submesh_autosharding_option_dicts: Sequence[dict]
+    # The physical submesh specification (host_ids, [device_ids]) of each stage.
+    # This option can used for more flexible submesh slicing.
+    # E.g., in a cluster of 3 nodes with 4 GPUs each node, the following specifications can group
+    # the 12 GPUs into two submeshes, each submesh has 6 GPUs (two from node 0 and four from node 1/2).
+    # host_ids = [[0, 1], [0, 2]]
+    # device_ids = [[[0, 1], [0, 1, 2, 3]], [[2, 3], [0, 1, 2, 3]]]
+    # submesh_physical_spec = list(zip(host_ids, device_ids))
+    submesh_physical_spec: Optional[Sequence[Tuple[
+        Sequence[int], Sequence[Sequence[int]]]]] = None
 
 
 UniformStageOption = namedtuple("UniformStageOption", [])
@@ -501,6 +510,65 @@ def get_compute_cost(
     return compute_cost, max_n_succ_stages
 
 
+@dataclass
+class HostSlice:
+    """Specifications of one slice of the virtual mesh."""
+    # Host ID
+    host_id: int
+    # The set of devices to select on the host.
+    device_ids: Sequence[int]
+
+
+@dataclass
+class VirtualSubmeshSpec:
+    """Specifications of one slice of the virtual mesh."""
+
+
+@dataclass
+class ManualMeshSlicingSpec:
+    """Specifications of how the virtual mesh is sliced."""
+    # A list of submesh specification.
+    # Its length should equal to the number of pipeline stages.
+    virtual_submeshes: Sequence[VirtualSubmeshSpec]
+
+
+def get_custom_sliced_virtual_submeshes(
+    virtual_mesh,
+    submesh_physical_specs: Sequence[Tuple[Sequence[int],
+                                           Sequence[Sequence[int]]]]):
+    pp = len(submesh_physical_specs)
+    host_ids, device_ids = map(list, list(zip(*submesh_physical_specs)))
+
+    # pp = 4
+    # host_ids = [[0], [1], [0], [1]]
+    # device_ids = [[[0, 1, 2, 3]], [[0, 1, 2, 3]], [[4, 5, 6, 7]], [[4, 5, 6, 7]]]
+    assert len(host_ids) == pp
+    assert len(device_ids) == pp
+
+    available_devices = [
+        set(range(virtual_mesh.num_devices_per_host))
+        for _ in range(virtual_mesh.num_hosts)
+    ]
+
+    virtual_submeshes = [None] * pp
+    for i in range(pp):
+        submesh_host_ids = host_ids[i]
+        submesh_device_ids = device_ids[i]
+        for host_id, device_list in zip(submesh_host_ids, submesh_device_ids):
+            device_set = set(device_list)
+            print(
+                f"available_devices[{host_id}]: {available_devices[host_id]}, device_set: {device_set}"
+            )
+            assert available_devices[
+                host_id] & device_set == device_set, f"{available_devices[host_id]} & {device_set}"
+            available_devices[host_id] -= device_set
+        virtual_submeshes[i] = virtual_mesh.slice_2d(submesh_host_ids,
+                                                     submesh_device_ids)
+
+    assert sum(map(len, available_devices)) == 0
+    return virtual_submeshes
+
+
 def get_sliced_virtual_submeshes(virtual_mesh, submesh_shapes):
     """Slice the origin mesh into submeshes given submesh shapes."""
     num_hosts = virtual_mesh.num_hosts
@@ -585,6 +653,8 @@ def cluster_layers_and_slice_mesh(
         assert len(layers) % 2 == 0
         num_layers = len(layers) // 2
 
+    submesh_physical_spec = None
+
     if isinstance(stage_option, AutoStageOption):
         if given_mesh:
             # TODO(zhuohan): Implement the auto slicing with given mesh.
@@ -661,6 +731,8 @@ def cluster_layers_and_slice_mesh(
                                submesh_shapes)
         autosharding_option_dicts = (
             stage_option.submesh_autosharding_option_dicts)
+        if stage_option.submesh_physical_spec is not None:
+            submesh_physical_spec = stage_option.submesh_physical_spec
     elif isinstance(stage_option, UniformStageOption):
         if given_mesh:
             num_stages = num_layers
@@ -700,8 +772,12 @@ def cluster_layers_and_slice_mesh(
             for mesh in virtual_mesh.launched_physical_mesh_group
         ]
     else:
-        sliced_meshes = get_sliced_virtual_submeshes(virtual_mesh,
-                                                     submesh_shapes)
+        if submesh_physical_spec is not None:
+            sliced_meshes = get_custom_sliced_virtual_submeshes(
+                virtual_mesh, submesh_physical_spec)
+        else:
+            sliced_meshes = get_sliced_virtual_submeshes(
+                virtual_mesh, submesh_shapes)
 
     num_forward_stages = len(forward_stage_layer_ids)
 
