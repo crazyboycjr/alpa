@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+export HOME_DIR=$HOME/nfs/alpa-torch-software
+export PATH=/usr/local/cuda/bin:$PATH  # to find nvcc
