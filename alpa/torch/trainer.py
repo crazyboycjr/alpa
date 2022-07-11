@@ -1,7 +1,10 @@
 # pylint: disable=line-too-long, pointless-string-statement, cell-var-from-loop
 """Example trainer that runs an SGD training loop"""
+import logging
+import time
 from collections import namedtuple
 
+import jax
 import alpa
 import alpa.torch as atorch
 """
@@ -18,10 +21,18 @@ related to dist dataloading.
 # A tuple to wrap all training states.
 TrainState = namedtuple("TrainState", ["params", "bufs", "optim_state"])
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO,
+    format=
+    '%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+)
 
 def train_torch_module(pt_module_gen, weight_init_func, dataloader, loss_func,
                        optim_gen, parallel_method):
-    for mode in ["local", "dist"]:
+    # for mode in ["local", "dist"]:
+    for mode in ["dist"]:
         # "local": pure PT eager mode on a single GPU,
         #     allows print in middle of graph, no dist training
         # "dist": graph mode by lowering PT program to JAX,
@@ -30,7 +41,7 @@ def train_torch_module(pt_module_gen, weight_init_func, dataloader, loss_func,
         atorch.set_mode(mode)
 
         # Prints verbose log for debugging.
-        atorch.debug = True
+        atorch.debug = False
 
         if atorch.mode() == "dist":
             alpa.init(cluster="ray")
@@ -95,16 +106,52 @@ def train_torch_module(pt_module_gen, weight_init_func, dataloader, loss_func,
                 atorch.enable_dist_for_func(create_train_state),
                 method=alpa.CreateStateParallel(train_step, pt_batch))
 
+        # print hlo_text for debuging
+        # executable = create_train_state.get_executable()
+        # hlo_text = executable.get_hlo_text()
+        # with open("/tmp/f.hlo", "w") as fout:
+        #     fout.write(hlo_text)
+        # raise NotImplementedError
+
+        create_state_executable = create_train_state.get_executable()
+        train_step_executable = train_step.get_last_executable()
+
         # Initialize weights and optimizer states
         state = create_train_state()
 
+        latencies = []
         # Run training loops
         for i, pt_batch in enumerate(dataloader):
             pt_batch = atorch.to_format(atorch.mode(), pt_batch)
+
+            train_step_executable.sync()
+            # start = time.perf_counter()
             state, loss_value = train_step(state, pt_batch)
+            train_step_executable.sync()
+            # end = time.perf_counter()
+            # latencies.append(end - start)
+
+            if (i + 1) % 5 == 0:
+                # print every 5 iterations
+                print(train_step_executable.get_execution_time_costs()[2:])
 
             # do whatever with the loss value, e.g. plot it on a graph
-            print(f"Iter: {i}, Loss: {float(loss_value):.6f}")
+            logger.info(f"Iter: {i}, Loss: {float(loss_value):.6f}")
+        latencies = train_step_executable.get_execution_time_costs()[2:]
+
+        latencies.sort()
+        print("latencies:", latencies)
+        avg_s = sum(latencies) / len(dataloader)
+        logger.info(f"duration of each iteration avg: {avg_s:.6f} secs, "
+                    f"median: {latencies[int(len(latencies) * 0.5)]} secs, "
+                    f"90P: {latencies[int(len(latencies) * 0.9)]} secs, "
+                    f"99P: {latencies[int(len(latencies) * 0.99)]} secs")
+
+        if isinstance(parallel_method, alpa.PipeshardParallel):
+            max_mem_allocated = train_step_executable.mesh_group.get_max_memory_allocated()
+        else:
+            max_mem_allocated = train_step_executable.physical_mesh.get_max_memory_allocated()
+        print(f"max_mem_allocated: {max_mem_allocated}")
 
         if atorch.mode() == "dist":
             alpa.shutdown()
