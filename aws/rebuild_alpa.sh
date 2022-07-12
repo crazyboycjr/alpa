@@ -6,11 +6,12 @@ export HOME_DIR=$HOME/nfs/alpa-torch-software
 export CUDA_VER=11.4
 export CUDA_HOME=/usr/local/cuda
 export PATH=${CUDA_HOME}/bin:$PATH
+export NUMPY_VER=1.22.4
 
 # Actrivate conda environment
 eval "$(conda shell.bash hook)"
 conda deactivate
-conda activate alpa-torch
+conda activate alpa
 
 # See tensorflow/third_party/gpus/cuda_configure.bzl
 export TF_NEED_CUDA=1
