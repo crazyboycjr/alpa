@@ -4,7 +4,9 @@ set -eu
 
 CONDA_ENV=alpa
 export HOME_DIR=$HOME/nfs/alpa-torch-software
+export LOCAL_HOME_DIR=$HOME/alpa-torch-software
 mkdir -p ${HOME_DIR}
+mkdir -p ${LOCAL_HOME_DIR}
 cd ${HOME_DIR}
 
 export CUDA_VER_SHORT=114
@@ -97,8 +99,9 @@ python3 -c "from cupy.cuda import nccl; print(nccl.get_version())"
 # we are expect to see 21104 here
 
 # After we have nccl, install the aws-ofi-nccl plugin
-cd $HOME
-[[ -d "$HOME/aws-ofi-nccl" ]] || git clone https://github.com/aws/aws-ofi-nccl.git -b v1.1.5-aws
+# don't use the latest version as it will only generate v5 symbol. We need v4.
+cd $LOCAL_HOME_DIR
+[[ -d "$LOCAL_HOME_DIR/aws-ofi-nccl" ]] || git clone https://github.com/aws/aws-ofi-nccl.git -b v1.1.5-aws
 cd aws-ofi-nccl
 ./autogen.sh
 sudo mkdir -p "${AWS_OFI_PLUGIN}"
@@ -115,10 +118,16 @@ sudo apt install coinor-cbc -y
 # Install nightly version of torch and torchdistx
 pip3 uninstall -y torch torchdistx
 pip3 install torchdistx --pre --extra-index-url https://download.pytorch.org/whl/nightly
+# torch==1.13.0.dev20220628+cu113
 
 # Build functorch from source
 pip3 uninstall -y functorch
-pip3 install git+https://github.com/pytorch/functorch@v0.2.0
+# pip3 install git+https://github.com/pytorch/functorch@v0.2.0 This version is not going to work, have to use nightly torch and compile functorch manually
+# rm -rf ${LOCAL_HOME_DIR}/functorch
+cd ${LOCAL_HOME_DIR}
+[[ -d "${LOCAL_HOME_DIR}/functorch" ]] || git clone https://github.com/pytorch/functorch
+cd ${LOCAL_HOME_DIR}/functorch
+python3 setup.py install
 
 # Use the correct version of numpy
 pip3 install numpy==${NUMPY_VER}

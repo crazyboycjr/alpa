@@ -100,12 +100,15 @@ def train_zhen_homogeneous(batch_size_per_device, num_iters):
 
     # The flag below controls whether to allow TF32 on matmul. This flag defaults to False
     # in PyTorch 1.12 and later.
-    # torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cuda.matmul.allow_tf32 = True
 
     # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
-    # torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
 
     zhen_module = ZHENCollection(LAYERS, D, TOKENS, F, OUTPUT_PER_ENSEMBLE)
+    # print('zhen_module parameters:', sum(p.numel() for p in zhen_module.parameters() if p.requires_grad))
+    # 173059456
+    # 692MB
 
     dataloader = [(torch.empty(
         B, D, F).cuda(), torch.empty(B, D * LAYERS * OUTPUT_PER_ENSEMBLE).cuda())] * num_iters

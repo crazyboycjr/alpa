@@ -106,6 +106,9 @@ PARALLEL_METHODS = [
         # num_micro_batches: 16, duration of each iteration avg: 0.705956 secs, median: 0.7422900199890137 secs, 90P: 0.8465251922607422 secs, 99P: 1.3067986965179443 secs
         # num_micro_batches: 16, using EFA does not help... duration of each iteration avg: 0.738531 secs, median: 0.7759156227111816 secs, 90P: 0.9488911628723145 secs, 99P: 1.2394416332244873 secs
         # num_micro_batches: 8, duration of each iteration avg: 0.610578 secs, median: 0.6345152854919434 secs, 90P: 0.7277560234069824 secs, 99P: 1.040968894958496 secs
+
+        # num_micro_batches: 16, using EFA, duration of each iteration avg: 0.275258 secs, median: 0.2899587154388428 secs, 90P: 0.34606218338012695 secs, 99P: 0.35033464431762695 secs
+        # This is pytorch ddp: duration of each iteration avg: 0.185125 secs, median: 0.17045736202271655 secs, 90P: 0.17091922700637951 secs, 99P: 1.6407538619823754 secs
         "description": "data parallel",
         "(pp, dp, op)": (1, 16, 1),
         "physical_mesh_shape": (2, 8),
@@ -118,6 +121,9 @@ PARALLEL_METHODS = [
         # num_micro_batches: 32, duration of each iteration avg: 5.999120 secs, median: 6.294488430023193 secs, 90P: 7.15912938117981 secs, 99P: 7.891208648681641 secs
         # num_micro_batches: 16, duration of each iteration avg: 5.624338 secs, median: 5.146093845367432 secs, 90P: 6.106522560119629 secs, 99P: 19.493966579437256 secs
         # num_micro_batches: 8,
+
+        # efa, num_micro_batches: 16, duration of each iteration avg: 0.593172 secs, median: 0.6157050132751465 secs, 90P: 0.6784508228302002 secs, 99P: 0.6992802619934082 secs
+        # tcp, num_micro_batches: 16, duration of each iteration avg: 0.669445 secs, median: 0.673079252243042 secs, 90P: 0.8875925540924072 secs, 99P: 0.9069862365722656 secs
         "description": "two nodes, within each node running operator parallel",
         "(pp, dp, op)": (1, 2, 8),
         "physical_mesh_shape": (2, 8),
@@ -141,9 +147,16 @@ PARALLEL_METHODS = [
         # This plan looks not bad
         # duration of each iteration avg: 1.052618 secs, median: 0.760066032409668 secs, 90P: 1.024703025817871 secs, 99P: 6.421065330505371 secs
         # [2.153844118118286, 2.8738555908203125, 2.2504305839538574]
+        # efa, num_micro_batches: 16, duration of each iteration avg: 0.381057 secs, median: 0.3933441638946533 secs, 90P: 0.4248046875 secs, 99P: 0.5040090084075928 secs
+        # tcp, num_micro_batches: 16, duration of each iteration avg: 0.410941 secs, median: 0.41552019119262695 secs, 90P: 0.5118517875671387 secs, 99P: 0.5499989986419678 secs
         "description": "Example #4: data-parallel across numa-nodes, tensor-parallel within a numa-node",
         "(pp, dp, op)": (1, 4, 4),
         "physical_mesh_shape": (2, 8),  # (4, 4) failed: assert required_num_hosts == 1
+        # "physical_mesh_shape": (0, 0),
+        # "host_ids": [[0, 0, 1, 1]],
+        # "device_ids": [[[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 2, 3], [4, 5, 6, 7]]],
+        # "host_ids": [[0, 1]],
+        # "device_ids": [[[0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4, 5, 6, 7]]],
     },
     {
         # failed: never finish the first iteration
@@ -158,23 +171,32 @@ PARALLEL_METHODS = [
         # num_micro_batches: 32, run again, duration of each iteration avg: 20.166597 secs, median: 21.410356998443604 secs, 90P: 22.74605417251587 secs, 99P: 22.843191146850586 secs
         "description": "Example #5.2: data parallel + intra-machine pipeline parallel",
         "(pp, dp, op)": (4, 4, 1),
-        "physical_mesh_shape": (0, 0),  # (4, 1)
+        # "physical_mesh_shape": (2, 2),  # (4, 1)
+        # tcp, num_micro_batches: 16, duration of each iteration avg: 4.716089 secs, median: 4.795248746871948 secs, 90P: 5.876234292984009 secs, 99P: 6.319248199462891 secs
         # [0,3,2,1], [4,7,6,5]
-        # "host_ids": [[0, 1], [0, 1], [0, 1], [0, 1]],
-        # "device_ids": [[[0, 2], [0, 2]], [[1, 3], [1, 3]], [[4, 6], [4, 6]], [[5, 7], [5, 7]]],
+        "host_ids": [[0, 1], [0, 1], [0, 1], [0, 1]],
+        "device_ids": [[[0, 4], [0, 4]], [[3, 7], [3, 7]], [[2, 6], [2, 6]], [[1, 5], [1, 5]]],
+
+        # tcp, num_micro_batches: 16, duration of each iteration avg: 4.435792 secs, median: 4.675730228424072 secs, 90P: 4.886426687240601 secs, 99P: 4.9773242473602295 secs
         # [0,3,4,7], [1,2,5,6]
         # "host_ids": [[0, 1], [0, 1], [0, 1], [0, 1]],
-        # "device_ids": [[[0, 2], [0, 2]], [[1, 3], [1, 3]], [[4, 6], [4, 6]], [[5, 7], [5, 7]]],
+        # "device_ids": [[[0, 1], [0, 1]], [[3, 2], [3, 2]], [[4, 5], [4, 5]], [[7, 6], [7, 6]]],
+
         # duration of each iteration avg: 20.791150 secs, median: 22.128350257873535 secs, 90P: 23.276580095291138 secs, 99P: 23.45837903022766 secs
         # 15.52617883682251, 16.176363706588745, 15.91279649734497, 16.444060564041138, 15.856158018112183, 16.74027109146118, 15.548842191696167, 15.776957750320435
+        # tcp, num_micro_batches: 16, duration of each iteration avg: 4.772827 secs, median: 4.985513687133789 secs, 90P: 5.721350908279419 secs, 99P: 5.977432727813721 secs
         # [0,1,4,5], [2,3,6,7]
         # "host_ids": [[0, 1], [0, 1], [0, 1], [0, 1]],
         # "device_ids": [[[0, 2], [0, 2]], [[1, 3], [1, 3]], [[4, 6], [4, 6]], [[5, 7], [5, 7]]],
+
         # 16.703232765197754, 17.657737255096436, 17.30591320991516, 17.8020601272583, 17.031238794326782, 18.052095651626587, 17.76880693435669, 16.9144070148468
         # another run: 19.64015030860901, 15.822978258132935, 16.193574905395508, 14.976128816604614
+        # tcp, num_micro_batches: 16, duration of each iteration avg: 4.822154 secs, median: 5.027798414230347 secs, 90P: 5.656952142715454 secs, 99P: 6.049246072769165 secs
         # [0,1,2,3], [4,5,6,7]
-        "host_ids": [[0, 1], [0, 1], [0, 1], [0, 1]],
-        "device_ids": [[[0, 4], [0, 4]], [[1, 5], [1, 5]], [[2, 6], [2, 6]], [[3, 7], [3, 7]]],
+        # "host_ids": [[0, 1], [0, 1], [0, 1], [0, 1]],
+        # "device_ids": [[[0, 4], [0, 4]], [[1, 5], [1, 5]], [[2, 6], [2, 6]], [[3, 7], [3, 7]]],
+        # wrong
+        # tcp, num_micro_batches: 16, duration of each iteration avg: 6.923140 secs, median: 7.217944622039795 secs, 90P: 8.190350532531738 secs, 99P: 8.254141807556152 secs
         # "host_ids": [[0], [1], [0], [1]],
         # "device_ids": [[[0, 1, 2, 3]], [[0, 1, 2, 3]], [[4, 5, 6, 7]], [[4, 5, 6, 7]]],
     },
