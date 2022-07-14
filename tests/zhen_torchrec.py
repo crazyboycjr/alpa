@@ -60,7 +60,7 @@ def train(model, dataloader, optim):
     for i, batch in enumerate(dataloader):
         start = time.perf_counter()
         loss_value = train_step(model, optim, batch)
-        # torch.cuda.synchronize()
+        torch.cuda.synchronize()
         end = time.perf_counter()
         latencies.append(end - start)
 

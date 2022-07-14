@@ -100,6 +100,9 @@ def data_parallel(pp: int, dp: int, op: int, num_micro_batches: int,
 #     },
 # },
 
+# single gpu, duration of each iteration avg: 0.037073 secs, median: 0.032457828521728516 secs, 90P: 0.05207514762878418 secs, 99P: 0.05215716361999512 secs, max_mem_allocated: 13491511040
+# 8 gpus, num_micro_batches: 8, duration of each iteration avg: 0.131354 secs, median: 0.13614344596862793 secs, 90P: 0.14940667152404785 secs, 99P: 0.15056109428405762 secs, max_mem_allocated: 3864780032
+
 PARALLEL_METHODS = [
     {
         # num_micro_batches: 32, duration of each iteration avg: 1.116381 secs, median: 1.0280978679656982 secs, 90P: 1.203047752380371 secs, 99P: 3.7230050563812256 secs
@@ -108,7 +111,13 @@ PARALLEL_METHODS = [
         # num_micro_batches: 8, duration of each iteration avg: 0.610578 secs, median: 0.6345152854919434 secs, 90P: 0.7277560234069824 secs, 99P: 1.040968894958496 secs
 
         # num_micro_batches: 16, using EFA, duration of each iteration avg: 0.275258 secs, median: 0.2899587154388428 secs, 90P: 0.34606218338012695 secs, 99P: 0.35033464431762695 secs
+        # num_micro_batches: 16, tcp, duration of each iteration avg: 0.356500 secs, median: 0.3932931423187256 secs, 90P: 0.4252331256866455 secs, 99P: 0.4303760528564453 secs
         # This is pytorch ddp: duration of each iteration avg: 0.185125 secs, median: 0.17045736202271655 secs, 90P: 0.17091922700637951 secs, 99P: 1.6407538619823754 secs
+        # another run, efa, num_micro_batches: 16, duration of each iteration avg: 0.269500 secs, median: 0.2741248607635498 secs, 90P: 0.3198568820953369 secs, 99P: 0.3624308109283447 secs, max_mem_allocated: 3279045376
+        # another run, tcp, num_micro_batches: 16, duration of each iteration avg: 0.238331 secs, median: 0.2433021068572998 secs, 90P: 0.2861208915710449 secs, 99P: 0.31250572204589844 secs, max_mem_allocated: 3279045376
+        # efa, 64 gpus, duration of each iteration avg: 0.999151 secs, median: 1.0135297775268555 secs, 90P: 1.223393440246582 secs, 99P: 1.250563383102417 secs, max_mem_allocated: 3027076608
+        # tcp, 64 gpus, duration of each iteration avg: 1.143670 secs, median: 1.2758233547210693 secs, 90P: 1.3663244247436523 secs, 99P: 1.367673397064209 secs, max_mem_allocated: 3027076608
+        # tcp, 64 gpus, duration of each iteration avg: 1.232506 secs, median: 1.3059947490692139 secs, 90P: 1.3425567150115967 secs, 99P: 1.3427753448486328 secs, max_mem_allocated: 3027076608
         "description": "data parallel",
         "(pp, dp, op)": (1, 16, 1),
         "physical_mesh_shape": (2, 8),
@@ -157,6 +166,13 @@ PARALLEL_METHODS = [
         # "device_ids": [[[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 2, 3], [4, 5, 6, 7]]],
         # "host_ids": [[0, 1]],
         # "device_ids": [[[0, 1, 2, 3, 4, 5, 6, 7], [0, 1, 2, 3, 4, 5, 6, 7]]],
+
+        # efa, duration of each iteration avg: 1.280525 secs, median: 1.220517635345459 secs, 90P: 1.78116774559021 secs, 99P: 1.839501142501831 secs, max_mem_allocated: 2739700480
+        # "(pp, dp, op)": (1, 16, 4),
+        # "physical_mesh_shape": (8, 8),
+        # efa, duration of each iteration avg: 1.400413 secs, median: 1.4358973503112793 secs, 90P: 1.58518385887146 secs, 99P: 1.7353997230529785 secs, max_mem_allocated: 4391375872
+        # "(pp, dp, op)": (1, 8, 8),
+        # "physical_mesh_shape": (8, 8),
     },
     {
         # failed: never finish the first iteration
@@ -304,6 +320,6 @@ def main():
 
 if __name__ == '__main__':
     # os.environ["NVIDIA_TF32_OVERRIDE"] = "0"
-    os.environ["NCCL_DEBUG"] = "info"
-    os.environ["ALPA_USE_AWS_EFA"] = "1"
+    # os.environ["NCCL_DEBUG"] = "info"
+    # os.environ["ALPA_USE_AWS_EFA"] = "1"
     main()
