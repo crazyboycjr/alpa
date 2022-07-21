@@ -4,7 +4,9 @@ import logging
 import time
 from collections import namedtuple
 
+import numpy as np
 import jax
+import jax.numpy as jnp
 import alpa
 import alpa.torch as atorch
 """
@@ -100,7 +102,8 @@ def train_torch_module(pt_module_gen, weight_init_func, dataloader, loss_func,
             # Assume we have a dataloader that supports `peek` function
             # (i.e. look at next batch but don't advance the pointer)
             pt_batch = dataloader[0]  # dataloader.peek()
-            pt_batch = atorch.make_shaped_array_from_pt_tensor(pt_batch)
+            # pt_batch = atorch.make_shaped_array_from_pt_tensor(pt_batch)
+            print('pt_batch:', pt_batch[0].shape)
 
             create_train_state = alpa.parallelize(
                 atorch.enable_dist_for_func(create_train_state),
@@ -116,13 +119,105 @@ def train_torch_module(pt_module_gen, weight_init_func, dataloader, loss_func,
         create_state_executable = create_train_state.get_executable()
         train_step_executable = train_step.get_last_executable()
 
+        print('get_parallel_plan', train_step_executable.get_parallel_plan())
+
+        print('input_placement_specs:', train_step_executable.get_input_placement_specs())
+        print('len(input_placement_specs):', len(train_step_executable.get_input_placement_specs()))
+        print('output_placement_specs:', train_step_executable.get_output_placement_specs())
+        batch_placement_specs = train_step_executable.get_input_placement_specs()[1]
+        print('batch_placement_specs:', batch_placement_specs)
+        # train_iter = alpa.DataLoader([atorch.to_format(atorch.mode(), ds) for ds in dataloader], batch_placement_specs, prefetch_size=1)
+        # mesh_group_in_use = train_step_executable.mesh_group
+        # train_iter = alpa.DataLoader(dataloader, batch_placement_specs, prefetch_size=1, mesh_group=mesh_group_in_use)
+
+        # def input_iter_func():
+        #     for i, batch in enumerate(dataloader):
+        #         yield batch
+
+        # print('pt_batch:', pt_batch)
+        # print('type(pt_batch):', type(pt_batch))
+        # batch_size = pt_batch[0].shape[0]
+        # num_samples = batch_size * len(dataloader)
+        # print(f'batch_size: {batch_size}')
+        # print(f'num_samples: {num_samples}')
+
+        # mesh_group_in_use = train_step_executable.mesh_group
+        # print('len(mesh_group):', len(mesh_group_in_use))
+        # train_iter = alpa.MeshDriverDataLoader(batch_size, num_samples,
+        #     input_iter_func, batch_placement_specs, prefetch_size=2, physical_mesh=mesh_group_in_use[0])
+
+        # train_iter = [atorch.to_format(atorch.mode(), ds) for ds in dataloader]
+
         # Initialize weights and optimizer states
         state = create_train_state()
 
+        mesh_group = train_step_executable.mesh_group
+        avals = []
+        indices = []
+        sharding_specs = []
+        for ps in jax.tree_leaves(batch_placement_specs):
+            avals.append(ps.aval)
+            sharding_specs.append(ps.sharding_specs[0])
+            # need to merge a ndarray of ndarray of tuples of slices to a list of array of slices
+            # [[(slice, slice, slice), (slice, slice, slice), ...], [(slice, slice, slice), (slice, slice, slice), ...]]
+            # [[slice, slice, ...], [slice, slice, ...]]
+            # a = ps.sharding_specs[0].indices(ps.aval.shape)
+            # print(type(a))
+            # print(type(a[0]))
+            # print(type(a[0][0]))
+            # print(type(a[0][0][0]))
+            # print(ps.sharding_specs[0].indices(ps.aval.shape))
+            # print(type(ps.sharding_specs[0].indices(ps.aval.shape)))
+            # print(tuple(ps.sharding_specs[0].indices(ps.aval.shape)))
+            # for ary in ps.sharding_specs[0].indices(ps.aval.shape):
+            #     indices_inner = []
+            #     for inner_tup in ary:
+            #         print('type(inner_tup)', type(inner_tup))
+            #         print('inner_tup', inner_tup)
+            #         print('list(inner_tup)', list(inner_tup))
+            #         print('array(inner_tup)', np.array(inner_tup))
+            #         print('inner_ary.flatten2()', np.array(list(map(lambda x: list(x), ary))).flatten())
+            # print(tuple(map(lambda outer_ary: np.array(list(map(lambda inner_ary: np.array(inner_ary).flatten(), outer_ary))), ps.sharding_specs[0].indices(ps.aval.shape))))
+            # #print(tuple(map(lambda outer_ary: np.array(list(map(lambda inner_ary: np.array(inner_ary).flatten(), outer_ary))), ps.sharding_specs[0].indices(ps.aval.shape))))
+            # print(tuple(map(lambda ary: np.array(list(map(lambda x: list(x), ary))).flatten(), ps.sharding_specs[0].indices(ps.aval.shape))))
+            # indices.append(tuple(map(lambda ary: ary.flatten(), ps.sharding_specs[0].indices(ps.aval.shape))))
+            # indices.append(tuple(map(lambda outer_ary: np.array(list(map(lambda inner_ary: np.array(inner_ary).flatten(), outer_ary))), ps.sharding_specs[0].indices(ps.aval.shape))))
+
+            # indices.append(tuple(map(lambda ary: np.array(list(map(lambda x: list(x), ary))).flatten(), ps.sharding_specs[0].indices(ps.aval.shape))))
+            for ary in tuple(ps.sharding_specs[0].indices(ps.aval.shape)):
+                print('ary:', ary)
+                print('type(ary):', type(ary))
+                print('ary.faltten()', ary.flatten())
+            print(ps.sharding_specs[0].indices(ps.aval.shape).flatten())
+            print(tuple(ps.sharding_specs[0].indices(ps.aval.shape).flatten()))
+            # indices.append(tuple(ps.sharding_specs[0].indices(ps.aval.shape)))
+            indices.append(ps.sharding_specs[0].indices(ps.aval.shape).flatten())
+            print(type(indices[0]))
+        print('avals:', avals)
+        print('indices:', indices)
+        print('sharding_specs:', sharding_specs)
+        # assert(False)
+
+        # depending on the first dimension of the first mesh, get that number of micro batches, aggregate the
+        # micro batches together and shard them using `shard_args_to_arrays`.
+        num_micro_batches = parallel_method.num_micro_batches
+        global_batch_size = pt_batch[0].shape[0]
+        assert(global_batch_size % num_micro_batches == 0)
+        def input_iter_func():
+            for batch in dataloader:
+                # micro_batches = jnp.split(batch, num_micro_batches // mesh_group[0].num_hosts)
+                # num_aggregated_micro_batches = mesh_group[0].num_hosts # the first dimension of the mesh
+                flatten_args, tree = jax.tree_flatten(batch)
+                new_args = mesh_group[0].shard_args_to_arrays(avals, indices, sharding_specs, flatten_args)
+                my_batch = jax.tree_unflatten(tree, new_args)
+                print(my_batch)
+                yield my_batch
+
         latencies = []
         # Run training loops
-        for i, pt_batch in enumerate(dataloader):
-            pt_batch = atorch.to_format(atorch.mode(), pt_batch)
+        for i, pt_batch in enumerate(input_iter_func()):
+            # pt_batch = atorch.to_format(atorch.mode(), pt_batch)
+            # print('pt_batch:', pt_batch[0], dir(pt_batch[0]), type(pt_batch[0]), pt_batch[0].shape, pt_batch[0].size)
 
             train_step_executable.sync()
             # start = time.perf_counter()

@@ -1,5 +1,6 @@
 import os
 
+import jax.numpy as jnp
 import torch
 import numpy as np
 import alpa.torch.optim as torchoptim
@@ -19,8 +20,8 @@ def weight_init_func(pt_module, name_map, params, bufs):
     return params, bufs
 
 
-def train_zhen_homogeneous(global_batch_size, num_iters, parallel_method):
-    B = global_batch_size  # 59  # made multiples of 8
+def train_zhen_homogeneous(input_batch_size, num_iters, parallel_method):
+    B = input_batch_size  # 59  # made multiples of 8
     F = 512
     D = 160
     LAYERS = 4
@@ -38,21 +39,23 @@ def train_zhen_homogeneous(global_batch_size, num_iters, parallel_method):
     pt_module_gen = lambda: ZHENCollection(LAYERS, D, TOKENS, F,
                                            OUTPUT_PER_ENSEMBLE)
 
-    dataloader = [(torch.empty(
-        B, D, F), torch.empty(B, D * LAYERS * OUTPUT_PER_ENSEMBLE))] * num_iters
+    # dataloader = [(torch.empty(
+    #     B, D, F), torch.empty(B, D * LAYERS * OUTPUT_PER_ENSEMBLE))] * num_iters
+    dataloader = [(jnp.ones(
+        (B, D, F), jnp.float32), jnp.ones((B, D * LAYERS * OUTPUT_PER_ENSEMBLE), jnp.float32))] * num_iters
 
     loss_func = lambda *args, **kwargs: torch.nn.functional.mse_loss(
         *args, **kwargs)
     optim_gen = torchoptim.adam(lr=1e-3)
 
-    alpa.global_config.xla_client_mem_fraction = 0.7
 
-    train_torch_module(pt_module_gen,
-                       weight_init_func,
-                       dataloader,
-                       loss_func,
-                       optim_gen,
-                       parallel_method)
+    alpa.global_config.print_compilation_time = True
+    alpa.global_config.print_auto_layer_stats = True
+    alpa.global_config.xla_client_mem_fraction = 0.7
+    alpa.global_config.use_dummy_value_for_benchmarking = True
+
+    train_torch_module(pt_module_gen, weight_init_func, dataloader, loss_func,
+                       optim_gen, parallel_method)
 
 
 def precheck(pp: int, dp: int, op: int, num_micro_batches: int,
@@ -88,6 +91,7 @@ def data_parallel(pp: int, dp: int, op: int, num_micro_batches: int,
         default_auto_sharding_option=alpa.AutoShardingOption(
             prefer_reduce_scatter=True))
 
+
 # {
 #     # torchrec: duration of each iteration avg: 0.185473 secs, median: 0.16794457199284807 secs, 90P: 0.16855745000066236 secs, 99P: 1.9236148939817213 secs
 #     # num_micro_batches: 8, duration of each iteration avg: 0.693365 secs, median: 0.15849089622497559 secs, 90P: 0.20190882682800293 secs, 99P: 10.839699506759644 secs
@@ -119,8 +123,8 @@ PARALLEL_METHODS = [
         # tcp, 64 gpus, duration of each iteration avg: 1.143670 secs, median: 1.2758233547210693 secs, 90P: 1.3663244247436523 secs, 99P: 1.367673397064209 secs, max_mem_allocated: 3027076608
         # tcp, 64 gpus, duration of each iteration avg: 1.232506 secs, median: 1.3059947490692139 secs, 90P: 1.3425567150115967 secs, 99P: 1.3427753448486328 secs, max_mem_allocated: 3027076608
         "description": "data parallel",
-        "(pp, dp, op)": (1, 16, 1),
-        "physical_mesh_shape": (2, 8),
+        "(pp, dp, op)": (1, 8, 1),
+        "physical_mesh_shape": (1, 8),
         "auto_sharding_option": {
             'force_batch_dim_to_mesh_dim': 0
         },
@@ -158,9 +162,10 @@ PARALLEL_METHODS = [
         # [2.153844118118286, 2.8738555908203125, 2.2504305839538574]
         # efa, num_micro_batches: 16, duration of each iteration avg: 0.381057 secs, median: 0.3933441638946533 secs, 90P: 0.4248046875 secs, 99P: 0.5040090084075928 secs
         # tcp, num_micro_batches: 16, duration of each iteration avg: 0.410941 secs, median: 0.41552019119262695 secs, 90P: 0.5118517875671387 secs, 99P: 0.5499989986419678 secs
-        "description": "Example #4: data-parallel across numa-nodes, tensor-parallel within a numa-node",
+        "description":
+            "Example #4: data-parallel across numa-nodes, tensor-parallel within a numa-node",
         "(pp, dp, op)": (1, 4, 4),
-        "physical_mesh_shape": (2, 8),  # (4, 4) failed: assert required_num_hosts == 1
+        "physical_mesh_shape": (2, 8),
         # "physical_mesh_shape": (0, 0),
         # "host_ids": [[0, 0, 1, 1]],
         # "device_ids": [[[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 2, 3], [4, 5, 6, 7]]],
@@ -185,13 +190,15 @@ PARALLEL_METHODS = [
         # This plan looks not bad
         # num_micro_batches: 32, duration of each iteration avg: 32.164927 secs, median: 31.394895553588867 secs, 90P: 43.208282470703125 secs, 99P: 43.236831188201904 secs
         # num_micro_batches: 32, run again, duration of each iteration avg: 20.166597 secs, median: 21.410356998443604 secs, 90P: 22.74605417251587 secs, 99P: 22.843191146850586 secs
-        "description": "Example #5.2: data parallel + intra-machine pipeline parallel",
+        "description":
+            "Example #5.2: data parallel + intra-machine pipeline parallel",
         "(pp, dp, op)": (4, 4, 1),
         # "physical_mesh_shape": (2, 2),  # (4, 1)
         # tcp, num_micro_batches: 16, duration of each iteration avg: 4.716089 secs, median: 4.795248746871948 secs, 90P: 5.876234292984009 secs, 99P: 6.319248199462891 secs
         # [0,3,2,1], [4,7,6,5]
         "host_ids": [[0, 1], [0, 1], [0, 1], [0, 1]],
-        "device_ids": [[[0, 4], [0, 4]], [[3, 7], [3, 7]], [[2, 6], [2, 6]], [[1, 5], [1, 5]]],
+        "device_ids": [[[0, 4], [0, 4]], [[3, 7], [3, 7]], [[2, 6], [2, 6]],
+                       [[1, 5], [1, 5]]],
 
         # tcp, num_micro_batches: 16, duration of each iteration avg: 4.435792 secs, median: 4.675730228424072 secs, 90P: 4.886426687240601 secs, 99P: 4.9773242473602295 secs
         # [0,3,4,7], [1,2,5,6]
@@ -226,20 +233,43 @@ PARALLEL_METHODS = [
     },
 ]
 
+
+# num_gpus = 16
+# avg_batch_size_per_device = 1024
+# # input_batch_size = micro_batch_size = avg_batch_size_per_device * num_gpus // dp // num_micro_batches
+# [(dp, op)] (pp = 4)
+# [16384 / 64 * 16] ->  [(4, 1), (4, 1), (2, 2), (1, 4)]
+# [(4, 1), (4, 1), (4, 1), (4, 1)]
+
 BENCHMARK_SUITES = {
-    "global_batch_size": 1024 * 16,
-    "num_micro_batches": 16,
-    # actual_batch_per_device = global_batch_size / num_devices
+    # This is how many samples are processed in one iteration on average to each device.
+    # Given the existence of operator-parallel and pipeline-parallel, we may need specify a larger input batch size.
+    "avg_batch_size_per_device": 1024,
+    "num_micro_batches": 4,
     "num_iters": 20,
     "parallel_methods": PARALLEL_METHODS[0:1],
 }
 
 
+# BENCHMARK_SUITES = {
+#     "global_batch_size": 1024 // 2,
+#     "num_micro_batches": 8,
+#     # actual_batch_per_device = global_batch_size / num_devices
+#     "num_iters": 20,
+#     "parallel_methods": PARALLEL_METHODS[4:5],
+# }
+
+
 def benchmark_zhen_homogeneous(benchmark_case):
     print(f"benchmarking: {benchmark_case}")
+    alpa.init("ray")
+    cluster = alpa.device_mesh.get_global_cluster()
+    num_gpus = cluster.num_devices
 
     c = benchmark_case
-    global_batch_size = c["global_batch_size"]
+    avg_batch_size_per_device = c["avg_batch_size_per_device"]
+    global_batch_size = avg_batch_size_per_device * num_gpus
+
     num_micro_batches = c["num_micro_batches"]
     num_iters = c["num_iters"]
     p = c["parallel_method"]
@@ -251,11 +281,16 @@ def benchmark_zhen_homogeneous(benchmark_case):
     host_ids = p.get("host_ids", None)
     device_ids = p.get("device_ids", None)
 
+    # input_batch_size = global_batch_size // dp // num_micro_batches
+    input_batch_size = global_batch_size
+    print(f'avg_batch_size_per_device: {avg_batch_size_per_device}, num_gpus: {num_gpus}, input_batch_size: {input_batch_size}, num_micro_batches: {num_micro_batches}, (pp, dp, op): ({pp}, {dp}, {op})')
+
     # num_micro_batches = 32
     num_auto_layers = pp * 1
 
     # check
-    precheck(pp, dp, op, num_micro_batches, num_auto_layers, host_ids, device_ids)
+    precheck(pp, dp, op, num_micro_batches, num_auto_layers, host_ids,
+             device_ids)
 
     physical_mesh_specs = None
     if host_ids is not None:
@@ -291,13 +326,11 @@ def benchmark_zhen_homogeneous(benchmark_case):
     # parallel_method = data_parallel(pp, dp, op, num_micro_batches,
     #                                 num_auto_layers)
 
-    # Result forward_stage_layer_ids: [[0], [1]]
-    # Result meshes: [(1, 8), (1, 8)]
-    # Result logical_mesh_shapes: [(1, 8), (1, 8)]
-    # Result autosharding_option_dicts: [{}, {}]
     # auto search
     # parallel_method = alpa.PipeshardParallel(
-    #     stage_mode="auto", num_micro_batches=num_micro_batches)
+    #     num_micro_batches=num_micro_batches,
+    #     layer_option=alpa.AutoLayerOption(layer_num=num_auto_layers),
+    #     stage_option="auto")
 
     # faster auto search
     # parallel_method = PipeshardParallel(
@@ -307,7 +340,7 @@ def benchmark_zhen_homogeneous(benchmark_case):
     #     default_auto_sharding_option=alpa.AutoShardingOption(
     #         force_data_parallel=True))
 
-    train_zhen_homogeneous(global_batch_size, num_iters, parallel_method)
+    train_zhen_homogeneous(input_batch_size, num_iters, parallel_method)
 
 
 def main():
