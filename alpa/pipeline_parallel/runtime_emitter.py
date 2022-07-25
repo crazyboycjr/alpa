@@ -670,10 +670,15 @@ class PipelineInstEmitter:
 
             if self.is_batch[global_idx]:
                 aval = var.aval
+                print('_compile_collect_mesh_input, aval.shape', aval.shape)
+                print('_compile_collect_mesh_input, num_batch', num_batch)
                 batch_dim = 0
                 new_shape = (num_batch * aval.shape[0],) + aval.shape[1:]
                 new_spec = get_microbatch_sharding_spec(var_to_spec[var],
                                                         batch_dim, num_batch)
+                print('_compile_collect_mesh_input, new_shape', new_shape)
+                print('_compile_collect_mesh_input, new_spec', new_spec)
+                print('pxla.spec_to_indices(new_shape, new_spec)', pxla.spec_to_indices(new_shape, new_spec))
                 input_shard_indices.append(
                     pxla.spec_to_indices(new_shape, new_spec))
                 input_shard_specs.append(new_spec)
@@ -1024,6 +1029,14 @@ class PipelineInstEmitter:
                         old_val.mesh_ids + (physical_mesh.mesh_id,),
                         old_val.sharding_specs + (shard_spec,))
 
+        print('mesh_arg_indices', mesh_arg_indices)
+        print('input_shard_specs', input_shard_specs)
+        print('self.is_batch', self.is_batch)
+        print('len(self.is_batch)', len(self.is_batch))
+        print('len(self.mesh_group)', len(self.mesh_group))
+        print('self.mesh_group[0].num_hosts', self.mesh_group[0].num_hosts)
+        print('self.mesh_group[0].num_devices', self.mesh_group[0].num_devices)
+        print('spec_arr', spec_arr)
         return spec_arr
 
     # TODO(yonghao): set empty buffer is not compatiable with local allgather

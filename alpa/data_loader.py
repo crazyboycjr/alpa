@@ -7,7 +7,8 @@ from jax.interpreters import pxla
 import numpy as np
 import ray
 
-from alpa.device_mesh import (DistributedArray, get_global_physical_mesh,
+import alpa
+from alpa.device_mesh import (DistributedArray, PhysicalDeviceMeshGroup, get_global_physical_mesh,
                               create_remote_array_refs)
 
 
@@ -19,7 +20,7 @@ class DataLoader:
         self.input_iter = input_iter
         self.prefetch_size = prefetch_size
 
-        self.physical_mesh = get_global_physical_mesh()
+        self.physical_mesh = get_global_physical_mesh(False)
         self.avals = []
         self.indices = []
         self.sharding_specs = []
@@ -70,25 +71,31 @@ def next_mesh_data_loader_uuid():
 def get_num_devices_for_whole_batch(sharding_spec, batch_dim=0):
     """Get the number of devices for a whole batch."""
     num_devices = 1
+    print('get_num_devices_for_whole_batch, sharding_spec.sharding:', sharding_spec.sharding)
     for sharding in sharding_spec.sharding:
         if isinstance(sharding, pxla.Chunked):
             num_devices *= np.prod(sharding.chunks)
 
+    print('get_num_devices_for_whole_batch, sharding_spec.mesh_mapping:', sharding_spec.mesh_mapping)
     for assignment in sharding_spec.mesh_mapping:
         if isinstance(assignment, pxla.Replicated):
+            print('assignment', assignment)
+            print('assignment.replicas', assignment.replicas)
             num_devices *= assignment.replicas
 
+    print('num_devices', num_devices)
     sharding = sharding_spec.sharding[batch_dim]
+    print('batch_dim sharding:', sharding)
 
     num_data_chunk = 1
     if isinstance(sharding, pxla.Chunked):
         num_data_chunk = np.prod(sharding.chunks)
 
         # Assert the data chunk is mapped to the first dim of device mesh
-        for assignment in sharding_spec.mesh_mapping:
-            if isinstance(assignment, pxla.ShardedAxis):
-                assert assignment.axis == 0
-                break
+        # for assignment in sharding_spec.mesh_mapping:
+        #     if isinstance(assignment, pxla.ShardedAxis):
+        #         assert assignment.axis == 0
+        #         break
 
     return num_devices / num_data_chunk
 
@@ -103,8 +110,10 @@ class MeshDriverDataLoader:
                  num_samples,
                  input_iter_func,
                  placement_specs,
-                 prefetch_size=1):
-        physical_mesh = get_global_physical_mesh()
+                 prefetch_size=1,
+                 physical_mesh=None):
+        if physical_mesh is None:
+            physical_mesh = get_global_physical_mesh()
         avals = []
         sharding_specs = []
         indices = []
@@ -133,6 +142,7 @@ class MeshDriverDataLoader:
         self.worker_data_loaders = []
         self.num_batches = num_samples // batch_size
 
+        print('physical_mesh.num_hosts', physical_mesh.num_hosts)
         for i in range(physical_mesh.num_hosts):
             host_output_uuids = []
             host_indices = []
@@ -151,6 +161,7 @@ class MeshDriverDataLoader:
                                                     num_hosts_for_one_batch)
                 assert batch_size_per_host.is_integer()
                 batch_size_per_host = int(batch_size_per_host)
+                print('batch_size_per_host', batch_size_per_host)
 
                 num_samples_per_host = self.num_batches * batch_size_per_host
 

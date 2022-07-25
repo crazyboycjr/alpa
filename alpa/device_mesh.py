@@ -185,12 +185,21 @@ class MeshHostWorker:
             uuids = [uuids]
         assert len(uuids) == num_batch
         assert len(indices) == self.num_devices * num_batch
+        print('type(indices):', type(indices))
+        print('type(indices[0]):', type(indices[0]))
+        print('type(indices[0][0]):', type(indices[0][0]))
+        print('dir(indices[0][0]):', dir(indices[0][0]))
         arys = [([None] * self.num_devices) for _ in range(num_batch)]
         for device_id in range(self.num_devices):
             for b in range(num_batch):
                 shard_shape = []
                 idx = device_id * num_batch + b
+                # idx = (device_id, b)
+                print('device_id, b:', device_id, b)
+                # for j, s in enumerate(indices[device_id][b]):
                 for j, s in enumerate(indices[idx]):
+                    print('s', s)
+                    print('shape[j]', shape[j])
                     filled_slice = s.indices(shape[j])
                     dim_size = len(range(*filled_slice))
                     shard_shape.append(dim_size)
@@ -1049,6 +1058,9 @@ class DistributedPhysicalDeviceMesh(PhysicalDeviceMesh):
             batching=False):
         """Get values of remote buffers."""
 
+        print('get_remote_buffers, self.num_hosts', self.num_hosts)
+        print('get_remote_buffers, host_local_ids', host_local_ids)
+
         return_list = True
         if not isinstance(ary_refs, Iterable):
             return_list = False
@@ -1088,10 +1100,15 @@ class DistributedPhysicalDeviceMesh(PhysicalDeviceMesh):
                 ret.append(buffers)
         else:
             obj_refs = []
+            print('host_local_ids', host_local_ids)
             for ary_ref, id_pairs in zip(ary_refs, host_local_ids):
                 ary_obj_refs = []
+                print('id_paris', id_pairs)
                 for id_pair in id_pairs:
                     host_id, local_id = id_pair
+                    print('host_id', host_id)
+                    print('len(self.workers)', len(self.workers))
+                    print('self.workers', self.workers)
                     ary_obj_refs.append(
                         self.workers[host_id].get_buffers.remote(
                             ary_ref.uuid, local_id))
@@ -1458,8 +1475,15 @@ class DistributedArray:
         one_replica_indices = []
         one_replica_host_local_ids = []
         seen_index_hashes = set()
+        print('_compute_one_replica_ids, self.indices:', self.indices)
         for i, index in enumerate(self.indices):
-            hashed_index = _hashable_index(index)
+            print('_compute_one_replica_ids, index:', index, type(index))
+            if isinstance(index, np.ndarray):
+                hashed_index = _hashable_index(list(index))[0]
+            else:
+                hashed_index = _hashable_index(index)
+            # print('hashed_index:', hashed_index, type(hashed_index)) # this variable is wrong, it should be list of tuples [(start, end)]
+            # print('seen_index_hashes:', seen_index_hashes)
             if hashed_index not in seen_index_hashes:
                 one_replica_indices.append(i)
                 one_replica_host_local_ids.append(
@@ -1488,11 +1512,14 @@ class DistributedArray:
         if self._npy_value is None:
             npy_value = np.empty(self.aval.shape, self.aval.dtype)
             if not self._fetched_np_buffers:
+                print('_value, self.one_replica_host_local_ids', self.one_replica_host_local_ids)
                 fetched_np_buffers = self.device_mesh.get_remote_buffers(
                     (self.remote_ref,), (self.one_replica_host_local_ids,))[0]
             else:
                 fetched_np_buffers = self._fetched_np_buffers
             for ct, i in enumerate(self.one_replica_buffer_ids):
+                print('self.indices[i]:', self.indices[i])
+                print('ct:', ct)
                 npy_value[self.indices[i]] = fetched_np_buffers[ct]
             self._npy_value = npy_value
         return self._npy_value
@@ -1706,10 +1733,15 @@ class VirtualPhysicalMesh:
         host_ids = [self.host_ids[x] for x in host_indices]
         host_info = [self.host_info[x] for x in host_indices]
 
+        print("host_ids", host_ids)
+        print("host_info", host_info)
         # Check the validity of device_indices
         for i in range(len(device_indices)):
+            print(f"i: {i}, device_indices: {device_indices[i]}")
             for x in device_indices[i]:
-                assert x in self.devices[i]
+                print(f"{x} in {self.devices[i]}")
+                assert x in self.devices[i], f"{x} in {self.devices[i]}"
+                # assert x in self.devices[host_indices[i]], f"{x} in {self.devices[host_indices[i]]}"
 
         return VirtualPhysicalMesh(host_ids=host_ids,
                                    host_info=host_info,
@@ -2102,6 +2134,7 @@ def get_global_physical_mesh(create_if_not_exist=False):
             mesh = LocalPhysicalDeviceMesh()
         else:
             mesh = global_cluster.get_physical_mesh()
+            print('global_cluster.get_physical_mesh():', mesh)
         global_physical_mesh = mesh
 
     return global_physical_mesh

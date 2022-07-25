@@ -388,15 +388,19 @@ def _get_full_batch_apply_grad(closed_jaxpr,
      post_microbatch_bound) = (split_compute_grad_and_apply_grad(
          closed_jaxpr, gensym_func, num_microbatch, inference_mode))
     reduced_vector = []
+    print("microbatch_bound.outvars:", microbatch_bound.outvars)
+    print("post_microbatch_bound.outvars:", post_microbatch_bound.outvars)
     for mb_var, var in zip(microbatch_bound.outvars,
                            post_microbatch_bound.outvars):
         microbatch_shape = mb_var.aval.shape
         batch_shape = var.aval.shape
+        print("microbatch_shape:", microbatch_shape)
+        print("batch_shape:", batch_shape)
         if microbatch_shape != batch_shape:
             expected_microbatched_shape = list(batch_shape)
             assert expected_microbatched_shape[batch_dim] % num_microbatch == 0
             expected_microbatched_shape[batch_dim] //= num_microbatch
-            assert tuple(expected_microbatched_shape) == microbatch_shape
+            assert tuple(expected_microbatched_shape) == microbatch_shape, f"{tuple(expected_microbatched_shape)} vs {microbatch_shape}"
             if len(apply_grad_jaxpr.eqns) > 0:
                 raise NotImplementedError(
                     "apply gradient with non-reduced input is not supported "

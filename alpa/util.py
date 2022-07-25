@@ -642,6 +642,8 @@ def get_microbatch_sharding_spec(spec: pxla.ShardingSpec, batch_dim,
         new_axis = mapping.axis
         if mapping.axis >= batch_dim_axis:
             new_axis += 1
+        print('get_microbatch_sharding_spec', mapping)
+        print('get_microbatch_sharding_spec', new_axis, mapping.axis)
         new_mapping.append(pxla.ShardedAxis(new_axis))
     new_mapping.append(pxla.ShardedAxis(batch_dim_axis))
 
