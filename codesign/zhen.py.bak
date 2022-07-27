@@ -1,13 +1,9 @@
-import unittest
 from enum import Enum
 from typing import List, Optional, Tuple, Union, Callable
 
 import torch
 import torch.nn as nn
-from torch import Tensor, embedding
-import alpa.torch.optim as torchoptim
-from alpa.torch.trainer import train_torch_module
-import alpa
+from torch import Tensor
 
 
 # Copied from timm
@@ -427,98 +423,3 @@ class ZHENCollection(nn.Module):
 
     def get_dense_params(self) -> List[nn.Parameter]:
         return list(self.parameters())
-
-
-def weight_init_func(pt_module, name_map, params, bufs):
-    # for k, m in pt_module.named_modules():
-    #     if isinstance(m, torch.nn.Linear):
-    #         params[name_map[f"{k}.weight"]] = torch.nn.init.xavier_uniform(params[name_map[f"{k}.weight"]])
-    #         params[name_map[f"{k}.bias"]] = torch.nn.init.normal(params[name_map[f"{k}.bias"]], std=1e-6)
-    return params, bufs
-
-
-class TorchZHENTest(unittest.TestCase):
-
-    def setUp(self):
-        torch.manual_seed(123)
-        alpa.set_seed(123)
-
-    def test_zhen_homogeneous(self):
-        B = 64  # made multiples of 8
-        F = 48  # made multiples of 8
-        D = 64
-        LAYERS = 5
-        OUTPUT_PER_ENSEMBLE = 48  # made multiples of 8
-        TOKENS = [
-            TokenMixer.ATTENTION, TokenMixer.LINEAR, TokenMixer.ATTENTION,
-            TokenMixer.CONVOLUTION, TokenMixer.DOT
-        ]
-
-        pt_module_gen = lambda: ZHENCollection(LAYERS, D, TOKENS, F,
-                                               OUTPUT_PER_ENSEMBLE)
-
-        dataloader = [(torch.empty(
-            B, D, F), torch.empty(B, D * LAYERS * OUTPUT_PER_ENSEMBLE))] * 2
-        loss_func = lambda *args, **kwargs: torch.nn.functional.mse_loss(
-            *args, **kwargs)
-        optim_gen = torchoptim.adam(lr=1e-3)
-        num_micro_batches = 2
-        parallel_method = alpa.PipeshardParallel(
-            num_micro_batches=num_micro_batches,
-            layer_option=alpa.AutoLayerOption(layer_num=2),
-            stage_option="auto")
-
-        _xla_client_mem_fraction_orig_value = alpa.global_config.xla_client_mem_fraction
-        alpa.global_config.xla_client_mem_fraction = 0.7
-
-        train_torch_module(pt_module_gen, weight_init_func, dataloader,
-                           loss_func, optim_gen, parallel_method)
-
-        alpa.global_config.xla_client_mem_fraction = _xla_client_mem_fraction_orig_value
-
-    def test_zhen_heterogeneous(self):
-        B = 64
-        F = 37
-        D = 64
-        OUTPUT_PER_ENSEMBLE = 48  # 50  # made multiples of 8
-        TOKENS = [[TokenMixer.ATTENTION, TokenMixer.LINEAR],
-                  [
-                      TokenMixer.ATTENTION, TokenMixer.CONVOLUTION,
-                      TokenMixer.DOT
-                  ], [TokenMixer.LINEAR, TokenMixer.DOT]]  # 3-layer ZHEN
-
-        pt_module_gen = lambda: ZHENCollection(len(TOKENS), D, TOKENS, F,
-                                               OUTPUT_PER_ENSEMBLE)
-
-        dataloader = [(torch.empty(
-            B, D, F), torch.empty(B,
-                                  D * len(TOKENS[-1]) * OUTPUT_PER_ENSEMBLE))
-                     ] * 2
-        loss_func = lambda *args, **kwargs: torch.nn.functional.mse_loss(
-            *args, **kwargs)
-        optim_gen = torchoptim.adam(lr=1e-3)
-        num_micro_batches = 2
-        parallel_method = alpa.PipeshardParallel(
-            num_micro_batches=num_micro_batches,
-            layer_option=alpa.AutoLayerOption(layer_num=2),
-            stage_option="auto")
-
-        _xla_client_mem_fraction_orig_value = alpa.global_config.xla_client_mem_fraction
-        alpa.global_config.xla_client_mem_fraction = 0.7
-
-        train_torch_module(pt_module_gen, weight_init_func, dataloader,
-                           loss_func, optim_gen, parallel_method)
-
-        alpa.global_config.xla_client_mem_fraction = _xla_client_mem_fraction_orig_value
-
-
-def suite():
-    suite = unittest.TestSuite()
-    suite.addTest(TorchZHENTest("test_zhen_homogeneous"))
-    suite.addTest(TorchZHENTest("test_zhen_heterogeneous"))
-    return suite
-
-
-if __name__ == '__main__':
-    runner = unittest.TextTestRunner()
-    runner.run(suite())

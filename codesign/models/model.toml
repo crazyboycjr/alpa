@@ -5,9 +5,9 @@ output_per_emb = 20
 num_zhen_layers = 4
 tokens = ["ATTENTION", "LINEAR", "ATTENTION", "DOT"]
 
-[[model]]
-num_features = 512
-emb_dim = 160
-output_per_emb = 20
-num_zhen_layers = 5
-tokens = ["ATTENTION", "LINEAR", "ATTENTION", "DOT", "LINEAR"]
+# [[model]]
+# num_features = 512
+# emb_dim = 160
+# output_per_emb = 20
+# num_zhen_layers = 5
+# tokens = ["ATTENTION", "LINEAR", "ATTENTION", "DOT", "LINEAR"]
