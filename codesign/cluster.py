@@ -27,6 +27,9 @@ class ClusterSpec(object):
     def value_csv(self) -> str:
         return ','.join([str(v) for v in dataclasses.asdict(self).values()])
 
+    def to_sql_values(self) -> str:
+        return f'{self.num_hosts}, {self.num_devices_per_host}, {self.transport}'
+
 
 HEAD = "a8"
 FOLLOWERS = ["a1", "a2", "a3", "a4", "a5", "a6", "a7"]

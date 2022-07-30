@@ -1,5 +1,6 @@
 import os
 import time
+import uuid
 
 import torch
 import alpa
@@ -8,16 +9,16 @@ from alpa.torch.trainer import train_torch_module
 from cluster import ClusterSpec, start_ray_cluster
 from training_spec import TrainingSpec
 from model import create_model, ModelSpec
-from db import save_record, save_trial_specs
+from parallel import ParallelSpec, create_parallel_method
+from db import DB, save_record, print_trial_specs
 
 
 def weight_init_func(pt_module, name_map, params, bufs):
     return params, bufs
 
 
-def train_with_alpa(args, cluster_spec: ClusterSpec, model_spec: ModelSpec,
-                    training_spec: TrainingSpec,
-                    parallel_method: alpa.parallel_method.ParallelMethod):
+def train_with_alpa(args, db: DB, cluster_spec: ClusterSpec, model_spec: ModelSpec,
+                    training_spec: TrainingSpec, parallel_spec: ParallelSpec):
     F = model_spec['num_features']
     D = model_spec['emb_dim']
     O = model_spec['output_per_emb']
@@ -35,6 +36,8 @@ def train_with_alpa(args, cluster_spec: ClusterSpec, model_spec: ModelSpec,
 
     global_batch_size = training_spec.global_batch_size
     avg_batch_size_per_device = training_spec.avg_batch_size_per_device
+
+    parallel_method = create_parallel_method(parallel_spec)
     num_micro_batches = parallel_method.num_micro_batches
     # Try to make sure global_batch_size // num_micro_batches // mesh[0].dp >= 1024
     # => num_micro_batches <= num_gpus // mesh[0].dp
@@ -69,19 +72,16 @@ def train_with_alpa(args, cluster_spec: ClusterSpec, model_spec: ModelSpec,
 
     # TODO(cjr): store them to databases, add datetime for each record
     # TODO(cjr): FpP, activation size, model size, jaxpr
-    if args.dry_run:
-        save_record(cluster_spec, model_spec, training_spec, parallel_method,
-                    alpa.global_config, None, None, None, None)
-    else:
-        save_trial_specs(cluster_spec, model_spec, training_spec,
-                         parallel_method)
+    print_trial_specs(cluster_spec, model_spec, training_spec, parallel_spec)
 
+    if not args.dry_run:
         try:
             # start ray cluster first
             start_ray_cluster(cluster_spec)
             time.sleep(1)
 
             # train
+            uuid = uuid.uuid4()
             latencies, memory, parallel_plan = train_torch_module(
                 pt_module_gen, weight_init_func, dataloader, loss_func,
                 optim_gen, parallel_method)
@@ -89,10 +89,10 @@ def train_with_alpa(args, cluster_spec: ClusterSpec, model_spec: ModelSpec,
         except Exception as e:
             # catch whatever exception
             print(e)
-            save_record(cluster_spec, model_spec, training_spec,
-                        parallel_method, alpa.global_config, None, None, None,
-                        e)
+            db.save_record(uuid, cluster_spec, model_spec, training_spec, parallel_spec,
+                           parallel_method, alpa.global_config, None, None, None,
+                           e)
         else:
-            save_record(cluster_spec, model_spec, training_spec,
-                        parallel_method, alpa.global_config, latencies, memory,
-                        parallel_plan, None)
+            db.save_record(uuid, cluster_spec, model_spec, training_spec, parallel_spec,
+                           parallel_method, alpa.global_config, latencies, memory,
+                           parallel_plan, None)

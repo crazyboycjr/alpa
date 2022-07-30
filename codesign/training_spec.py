@@ -13,10 +13,12 @@ class TrainingSpec(object):
                                    skip_if_false=True)
     loss_func: Optional[Callable[...,
                                  Any]] = field(default_factory=lambda: None,
-                                               skip=True)
+                                               skip=True,
+                                               repr=False)
     optim_gen: Optional[Callable[...,
                                  Any]] = field(default_factory=lambda: None,
-                                               skip=True)
+                                               skip=True,
+                                               repr=False)
 
     def header_csv(self) -> str:
         return ','.join(
@@ -24,6 +26,12 @@ class TrainingSpec(object):
 
     def value_csv(self) -> str:
         return ','.join([
+            f'{self.global_batch_size}', f'{self.avg_batch_size_per_device}',
+            f'{self.num_iters}'
+        ])
+
+    def to_sql_values(self) -> str:
+        return ', '.join([
             f'{self.global_batch_size}', f'{self.avg_batch_size_per_device}',
             f'{self.num_iters}'
         ])

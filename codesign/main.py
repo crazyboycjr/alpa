@@ -4,6 +4,7 @@ import argparse
 
 from config import Config
 from train import train_with_alpa
+from db import DB
 
 '''
 example: ./main.py --dry-run
@@ -22,19 +23,26 @@ def add_args(parser):
         type=str,
         default='codesign/models/config.toml',
         help='The path to the configuration.')
+    parser.add_argument(
+        '-d',
+        '--db',
+        type=str,
+        default='codesign/results.db',
+        help='The path to the sqlite3 database file. All the results will be saved there.')
 
 
 def main(args):
     # load config
     config = Config.load(args.config)
+    # connect to db
+    db = DB(args.db)
 
     # enumerate and traverse all the cases
     for cluster_spec in config.generate_cluster_specs():
         for model_spec, training_spec in config.generate_models(cluster_spec):
-            for parallel_method in config.generate_parallel_methods(cluster_spec):
-                time.sleep(1)
-                train_with_alpa(args, cluster_spec, model_spec, training_spec,
-                                parallel_method)
+            for parallel_spec in config.generate_parallel_specs(cluster_spec):
+                train_with_alpa(args, db, cluster_spec, model_spec, training_spec,
+                                parallel_spec)
 
 
 if __name__ == '__main__':
