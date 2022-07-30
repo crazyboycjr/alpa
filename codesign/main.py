@@ -29,6 +29,10 @@ def add_args(parser):
         type=str,
         default='codesign/results.db',
         help='The path to the sqlite3 database file. All the results will be saved there.')
+    parser.add_argument(
+        '--search-model',
+        action='store_true',
+        help='Whether to search the model. If not, use the models specified in the config.toml.')
 
 
 def main(args):

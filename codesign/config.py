@@ -1,12 +1,12 @@
 from dataclasses import dataclass
-from typing import Dict, Any, Tuple, Sequence, List
+from typing import Tuple, List
 
 from serde import serde
 from serde.toml import from_toml
 
 from cluster import ClusterSpec
 from training_spec import TrainingSpec
-from parallel import ParallelSpec, precheck
+from parallel import ParallelSpec
 from model import ModelSpec, get_token_mixer
 
 
