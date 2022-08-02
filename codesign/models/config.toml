@@ -37,11 +37,11 @@ num_hosts = 8
 num_devices_per_host = 8
 transport = "EFAx4"
 
-[[parallel_spec]]
-description = "Auto search"
-num_micro_batches = [1, 2, 4]
-num_auto_layers = 4
-remat_layer = false
+# [[parallel_spec]]
+# description = "Auto search"
+# num_micro_batches = [1, 2, 4]
+# num_auto_layers = 4
+# remat_layer = false
 
 [[parallel_spec]]
 description = "data parallel"

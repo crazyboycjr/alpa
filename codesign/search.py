@@ -8,11 +8,15 @@ from model import ModelSpec
 
 def explode(placed: List[TokenMixer], last_op: int, num_ops: int, tokens: Sequence[TokenMixer]):
     """Enumerate all the combinations of putting `num_ops` tokens, selected from `tokens`."""
+    # print(placed, last_op, num_ops, tokens)
     if len(placed) == num_ops:
         yield placed
+        return
     for op in range(last_op, len(tokens)):
-        placed.push(tokens[op])
-        explode(placed, op, tokens, num_ops)
+        # print('op', op)
+        placed.append(tokens[op])
+        for sol in explode(placed, op, num_ops, tokens):
+            yield sol
         placed.pop()
 
 
@@ -32,19 +36,26 @@ def dfs(ops: List[List[TokenMixer]], cur_layer: int, placed_ops: int,
     for i in range(1, total_ops - placed_ops + 1):
         for layer_ops in explode([], 0, i, tokens):
             ops[cur_layer] = layer_ops
-            dfs(ops, cur_layer + 1, placed_ops + i, num_layers, total_ops)
+            dfs(ops, cur_layer + 1, placed_ops + i, tokens, num_layers, total_ops, result)
 
 
 def search_model_fix_num_layers(tokens: Sequence[TokenMixer], num_layers: int,
                                 total_ops: int) -> List[ModelSpec]:
     ops = [[] for _ in range(num_layers)]
     result = []
-    dfs([], 0, 0, tokens, num_layers, total_ops, result)
+    dfs(ops, 0, 0, tokens, num_layers, total_ops, result)
 
     models = []
     for ops in result:
         # construct a model_spec
-        pass
+        model_spec = {
+            'num_features': 512,
+            'emb_dim': 160,
+            'output_per_emb': 20,
+            'num_zhen_layers': num_layers,
+            'tokens': ops,
+        }
+        models.append(model_spec)
     return models
 
 
@@ -53,7 +64,6 @@ def search_models(tokens: Sequence[TokenMixer], max_layers: int,
     models = []
     for num_layers in range(1, max_layers + 1):
         models_tmp = search_model_fix_num_layers(tokens, num_layers, total_ops)
-        cnt += len(models_tmp)
         models += models_tmp
     return models
 

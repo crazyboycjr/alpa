@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import time
 import argparse
 
 from config import Config
@@ -9,6 +8,8 @@ from db import DB
 '''
 example: ./main.py --dry-run
 example: NCCL_DEBUG=info ./main.py --config codesign/models/config.toml
+example: CODESIGN_LOG_LEVEL=info NCCL_DEBUG=info codesign/main.py
+example: CODESIGN_LOG_LEVEL=info NCCL_DEBUG=info codesign/main.py --search-model
 '''
 
 def add_args(parser):
@@ -33,9 +34,19 @@ def add_args(parser):
         '--search-model',
         action='store_true',
         help='Whether to search the model. If not, use the models specified in the config.toml.')
+    parser.add_argument(
+        '--manual-job-timeout',
+        type=int,
+        default='600',
+        help='The timeout threshold in seconds for jobs using manual stage. (Default: 10min)')
 
 
 def main(args):
+    if args.search_model:
+        import search
+        search.test()
+        return
+    
     # load config
     config = Config.load(args.config)
     # connect to db

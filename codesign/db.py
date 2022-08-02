@@ -1,4 +1,7 @@
+import time
+import logging
 import os
+import dataclasses
 from typing import Dict, Optional, Any, Sequence
 import sqlite3
 import uuid
@@ -13,6 +16,8 @@ import parallel
 from cluster import ClusterSpec
 from parallel import ParallelSpec
 from training_spec import TrainingSpec
+from log import logger
+
 
 # The list of environment variable we will print
 ENV_FILTER = [
@@ -39,28 +44,53 @@ def print_results(latencies: Sequence[float], memory: int,
 
 
 def get_all_configs(parallel_method: alpa.parallel_method.ParallelMethod,
-                    parallel_plan: alpa.parallel_plan.ParallelPlan,
+                    parallel_plan: Optional[alpa.parallel_plan.ParallelPlan],
                     alpa_global_config: GlobalConfig) -> str:
     import json
+    # manually expand parallel_method
+    pm_dict = parallel_method.__dict__
+    if pm_dict.get("devices", None) is not None:
+        pm_dict["devices"] = pm_dict["devices"].__dict__
+    if pm_dict.get("as_option", None) is not None and not isinstance(
+            pm_dict.get("as_option", None), dict):
+        pm_dict["as_option"] = pm_dict["as_option"].__dict__
+    if not isinstance(pm_dict.get("layer_option", ""), str) and not isinstance(
+            pm_dict.get("layer_option", ""), dict):
+        pm_dict["layer_option"] = pm_dict["layer_option"].__dict__
+    if not isinstance(pm_dict.get("stage_option", ""), str) and not isinstance(
+            pm_dict.get("stage_option", ""), dict):
+        pm_dict["stage_option"] = pm_dict["stage_option"].__dict__
+
+    if parallel_plan is not None:
+        if not isinstance(parallel_plan.pipeline_plan.layer_option,
+                          str) and not isinstance(
+                              parallel_plan.pipeline_plan.layer_option, dict):
+            parallel_plan.pipeline_plan.layer_option = parallel_plan.pipeline_plan.layer_option.__dict__
+        plan = str(dataclasses.asdict(parallel_plan))
+    else:
+        plan = None
     all_configs = {
-        'parallel_method': parallel_method.__dict__,
-        'parallel_plan': parallel_plan,
+        'parallel_method': pm_dict,
+        'parallel_plan': plan,
         'alpa_global_config': alpa_global_config.__dict__,
         'env': [f'{e}={os.getenv(e)}' for e in ENV_FILTER if e in os.environ],
     }
-    return json.dumps(all_configs)
+    # return json.dumps(all_configs)
+    return str(all_configs)
 
 
-def print_record(cluster_spec: ClusterSpec, model_spec: Dict[str, Any],
-                 training_spec: TrainingSpec, parallel_spec: ParallelSpec,
+def print_record(uuid: uuid.UUID, cluster_spec: ClusterSpec,
+                 model_spec: Dict[str, Any], training_spec: TrainingSpec,
+                 parallel_spec: ParallelSpec,
                  parallel_method: alpa.parallel_method.ParallelMethod,
                  alpa_global_config: GlobalConfig,
                  latencies: Optional[Sequence[float]], memory: Optional[int],
                  parallel_plan: Optional[ParallelPlan],
                  error: Optional[Exception]):
-    print(cluster_spec.value_csv())
+    print('job_id:', uuid)
+    print(cluster_spec)
     print(model_spec)
-    print(training_spec.value_csv())
+    print(training_spec)
     print(parallel_spec)
     # print(parallel_method.__dict__)
     # print(alpa_global_config.__dict__)
@@ -80,7 +110,7 @@ class DB(object):
 
     def __init__(self, db_file: str):
         '''Connect and create the result database.'''
-        self.con = sqlite3.connect('results.db')
+        self.con = sqlite3.connect(db_file)
         self.cur = self.con.cursor()
 
         # this is the only table we use
@@ -88,14 +118,16 @@ class DB(object):
 
     def create_table(self):
         # Create table
-        self.cur.execute('''CREATE TABLE IF NOT EXISTS results
-                            (datetime text, trail_uuid text,
-                            num_zhen_layers int, token_mixer text, input_features int, emb_dimensions int, output_per_ensemble int
+        self.cur.execute('''CREATE TABLE IF NOT EXISTS results2
+                            (datetime text, job_duration real, trail_uuid text,
+                            num_zhen_layers int, token_mixer text, input_features int, emb_dimensions int, output_per_ensemble int,
                             num_nodes int, gpus_per_node int, transport text,
                             input_batch_size int, avg_batch_size_per_gpu int, num_iters int,
                             description text, num_micro_batches int, num_auto_layers int, pp_dp_op text, physical_mesh_shapes text, host_ids text, device_ids text, remat_layer int,
                             avg real, median real, p90 real, max_memory int,
-                            all_configs, text)''')
+                            error text,
+                            all_configs text)''')
+        # job duration is for tracking the progress, just providing an estimation
 
     def __del__(self):
         # Save (commit) the changes
@@ -105,6 +137,32 @@ class DB(object):
         # Just be sure any changes have been committed or they will be lost.
         self.con.close()
 
+    def query_record(self, cluster_spec: ClusterSpec,
+                     model_spec: Dict[str, Any], training_spec: TrainingSpec,
+                     parallel_spec: ParallelSpec) -> bool:
+        '''Query if the record exists. True for found; False for not found.'''
+        model_spec_sql_val = model.to_sql_values(model_spec)
+        cluster_spec_sql_val = cluster_spec.to_sql_values()
+        training_spec_sql_val = training_spec.to_sql_values()
+        parallel_spec_sql_val = parallel.to_sql_values(parallel_spec)
+
+        # select rowid from results where (num_zhen_layers, input_features, input_batch_size) = (4, 512, 8193);
+        sql_cmd = f'''SELECT rowid FROM results where
+                      (
+                        num_zhen_layers, token_mixer, input_features, emb_dimensions, output_per_ensemble,
+                        num_nodes, gpus_per_node, transport,
+                        input_batch_size, avg_batch_size_per_gpu, num_iters,
+                        description, num_micro_batches, num_auto_layers, pp_dp_op, physical_mesh_shapes, host_ids, device_ids, remat_layer
+                      ) IS (
+                        {model_spec_sql_val},
+                        {cluster_spec_sql_val},
+                        {training_spec_sql_val},
+                        {parallel_spec_sql_val}
+                      ) and avg IS NOT NULL'''
+
+        logger.debug(sql_cmd)
+        return self.cur.execute(sql_cmd).fetchone() is not None
+
     def save_record(self, uuid: uuid.UUID, cluster_spec: ClusterSpec,
                     model_spec: Dict[str, Any], training_spec: TrainingSpec,
                     parallel_spec: ParallelSpec,
@@ -112,7 +170,9 @@ class DB(object):
                     alpa_global_config: GlobalConfig,
                     latencies: Optional[Sequence[float]], memory: Optional[int],
                     parallel_plan: Optional[ParallelPlan],
-                    error: Optional[Exception]):
+                    error: Optional[Exception], start_ts):
+        job_duration = time.perf_counter() - start_ts
+
         print_record(uuid, cluster_spec, model_spec, training_spec,
                      parallel_spec, parallel_method, alpa.global_config,
                      alpa_global_config, latencies, parallel_plan, error)
@@ -128,23 +188,24 @@ class DB(object):
         else:
             avg_lat = med_lat = p90_lat = 'NULL'
         max_memory = memory if memory is not None else 'NULL'
-        error = str(error) if error is not None else 'NULL'
+        error = f'"{str(error)}"' if error is not None else 'NULL'
 
         all_configs = get_all_configs(parallel_method, parallel_plan,
                                       alpa_global_config)
         sql_cmd = f'''INSERT INTO results VALUES
                       (
-                        datetime(), {uuid},
+                        datetime(), {job_duration}, "{uuid}",
                         {model_spec_sql_val},
                         {cluster_spec_sql_val},
                         {training_spec_sql_val},
                         {parallel_spec_sql_val},
                         {avg_lat}, {med_lat}, {p90_lat}, {max_memory},
                         {error},
-                        {all_configs}
+                        ?
                       )'''
 
-        self.cur.execute(sql_cmd)
+        logger.debug(sql_cmd)
+        self.cur.execute(sql_cmd, (all_configs,))
 
         # Save (commit) the changes
         self.con.commit()

@@ -1,13 +1,14 @@
+import threading
 import dataclasses
 from dataclasses import dataclass
 import threading
 import subprocess
 import shlex
-import logging
 import time
 
 import ray
 from serde import serde
+from log import logger
 
 
 @serde
@@ -28,20 +29,12 @@ class ClusterSpec(object):
         return ','.join([str(v) for v in dataclasses.asdict(self).values()])
 
     def to_sql_values(self) -> str:
-        return f'{self.num_hosts}, {self.num_devices_per_host}, {self.transport}'
+        return f'{self.num_hosts}, {self.num_devices_per_host}, "{self.transport}"'
 
 
 HEAD = "a8"
 FOLLOWERS = ["a1", "a2", "a3", "a4", "a5", "a6", "a7"]
 RAY_PATH = "/home/cjr/miniconda3/envs/alpa/bin/ray"
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format=
-    '%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-)
 
 
 def run_task(cmd):
@@ -84,11 +77,11 @@ def shutdown_ray_cluster():
     th_leader = []
     ths_follower = []
     cmd_leader = {
-        HEAD: [f"{RAY_PATH} stop --grace-period 10"],
+        HEAD: [f"{RAY_PATH} stop --grace-period 10 --force"],
     }
     cmd_follower = {}
     for w in FOLLOWERS:
-        cmd_follower[w] = [f"{RAY_PATH} stop --grace-period 10"]
+        cmd_follower[w] = [f"{RAY_PATH} stop --grace-period 10 --force"]
 
     ssh_submit(cmd_follower, ths_follower)
     wait_for_threads(ths_follower)
@@ -106,14 +99,12 @@ def start_ray_cluster(cluster_spec: ClusterSpec):
     time.sleep(1)
     th_leader = []
     ths_follower = []
-    # th_checker = []
     cmd_leader = {
         HEAD: [
             f"{RAY_PATH} start --head --dashboard-host 0.0.0.0 --num-gpus {cluster_spec.num_devices_per_host}"
         ],
     }
     cmd_follower = {}
-    # cmd_checker = {HEAD: [f"{RAY_PATH} status", f"{RAY_PATH} status"]}
     for i in range(1, cluster_spec.num_hosts):
         cmd_follower[FOLLOWERS[i - 1]] = [
             f"{RAY_PATH} start --num-gpus {cluster_spec.num_devices_per_host} --address=a8:6379"
@@ -124,6 +115,24 @@ def start_ray_cluster(cluster_spec: ClusterSpec):
     ssh_submit(cmd_follower, ths_follower)
     wait_for_threads(ths_follower)
 
-    # ssh_submit(cmd_checker, th_checker)
-    # wait_for_threads(th_checker)
+    # reset global states of alpa to make it work properly
+    from alpa.timer import timers
+    for timer in timers.timers.values():
+        timer.reset()
     ray.init(address="auto", ignore_reinit_error=True)
+
+
+def timeout_and_shutdown_ray_cluster(timeout_secs) -> threading.Thread:
+
+    def inner(e: threading.Event):
+        start = time.time()
+        while not e.isSet():
+            time.sleep(1)
+            if time.time() - start > timeout_secs:
+                shutdown_ray_cluster()
+                return
+
+    e = threading.Event()
+    th = threading.Thread(target=inner, args=(e, ))
+    th.start()
+    return e, th

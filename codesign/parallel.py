@@ -17,7 +17,7 @@ def precheck(p: ParallelSpec, cluster_spec: ClusterSpec):
     host_ids = p.get("host_ids", None)
     device_ids = p.get("device_ids", None)
     num_auto_layers = p["num_auto_layers"]
-    for num_micro_batches in p["num_micro_batches"]:
+    for num_micro_batches in range(p["num_micro_batches"]):
         _precheck(cluster_spec, pp, dp, op, num_micro_batches, num_auto_layers,
                   host_ids, device_ids)
 
@@ -111,10 +111,10 @@ def to_sql_values(p: ParallelSpec) -> str:
     desc = p['description']
     num_micro_batches = p['num_micro_batches']
     num_auto_layers = p['num_auto_layers']
-    pp_dp_op = '(' + ', '.join(p['(pp, dp, op)']) + ')'
+    pp_dp_op =  '"(' + ', '.join([str(i) for i in p['(pp, dp, op)']]) + ')"' if '(pp, dp, op)' in p else 'NULL'
     physical_mesh_shape = p.get("physical_mesh_shape", (0, 0))
-    host_ids = p.get("host_ids", None)
-    device_ids = p.get("device_ids", None)
-    remat_layer = p["remat_layer"]
+    host_ids = f'"{p["host_ids"]}"' if "host_ids" in p else 'NULL'
+    device_ids = f'"{p["device_ids"]}"' if "device_ids" in p else 'NULL'
+    remat_layer = "TRUE" if p["remat_layer"] else "FALSE"
 
-    return f'{desc}, {num_micro_batches}, {num_auto_layers}, {pp_dp_op}, {physical_mesh_shape}, {host_ids}, {device_ids}, {remat_layer}'
+    return f'"{desc}", {num_micro_batches}, {num_auto_layers}, {pp_dp_op}, "{physical_mesh_shape}", {host_ids}, {device_ids}, {remat_layer}'

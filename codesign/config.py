@@ -64,6 +64,7 @@ class Config(object):
                 # high-level parallelism specification
                 if p["description"] == "Auto search":
                     yield ret
+                    continue
 
                 # filter
                 pp, dp, op = p["(pp, dp, op)"]

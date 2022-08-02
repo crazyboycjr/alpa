@@ -33,4 +33,4 @@ def to_sql_values(model_spec: ModelSpec) -> str:
     output_per_emb = model_spec['output_per_emb']
     num_zhen_layers = model_spec['num_zhen_layers']
     tokens = model_spec['tokens']
-    return f'{num_zhen_layers}, {tokens}, {num_features}, {emb_dim}, {output_per_emb}'
+    return f'{num_zhen_layers}, "{tokens}", {num_features}, {emb_dim}, {output_per_emb}'
