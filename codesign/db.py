@@ -46,26 +46,32 @@ def print_results(latencies: Sequence[float], memory: int,
 def get_all_configs(parallel_method: alpa.parallel_method.ParallelMethod,
                     parallel_plan: Optional[alpa.parallel_plan.ParallelPlan],
                     alpa_global_config: GlobalConfig) -> str:
-    import json
+    import sys
+    import copy
+    pm = copy.deepcopy(parallel_method)
+    pp = copy.deepcopy(parallel_plan)
+
     # manually expand parallel_method
-    pm_dict = parallel_method.__dict__
-    if pm_dict.get("devices", None) is not None:
-        pm_dict["devices"] = pm_dict["devices"].__dict__
-    if pm_dict.get("as_option", None) is not None and not isinstance(
-            pm_dict.get("as_option", None), dict):
-        pm_dict["as_option"] = pm_dict["as_option"].__dict__
+    pm_dict = pm.__dict__
+    # if pm_dict.get("devices", None) is not None:
+    #     pm_dict["devices"] = pm_dict["devices"].__dict__
+    # if pm_dict.get("as_option", None) is not None and not isinstance(
+    #         pm_dict.get("as_option", None), dict):
+    #     pm_dict["as_option"] = pm_dict["as_option"].__dict__
     if not isinstance(pm_dict.get("layer_option", ""), str) and not isinstance(
             pm_dict.get("layer_option", ""), dict):
         pm_dict["layer_option"] = pm_dict["layer_option"].__dict__
-    if not isinstance(pm_dict.get("stage_option", ""), str) and not isinstance(
-            pm_dict.get("stage_option", ""), dict):
-        pm_dict["stage_option"] = pm_dict["stage_option"].__dict__
+    # if not isinstance(pm_dict.get("stage_option", ""), str) and not isinstance(
+    #         pm_dict.get("stage_option", ""), dict):
+    #     pm_dict["stage_option"] = pm_dict["stage_option"].__dict__
+    # print(pm_dict)
+    # sys.exit(1)
 
-    if parallel_plan is not None:
-        if not isinstance(parallel_plan.pipeline_plan.layer_option,
+    if pp is not None:
+        if not isinstance(pp.pipeline_plan.layer_option,
                           str) and not isinstance(
-                              parallel_plan.pipeline_plan.layer_option, dict):
-            parallel_plan.pipeline_plan.layer_option = parallel_plan.pipeline_plan.layer_option.__dict__
+                              pp.pipeline_plan.layer_option, dict):
+            pp.pipeline_plan.layer_option = pp.pipeline_plan.layer_option.__dict__
         plan = str(dataclasses.asdict(parallel_plan))
     else:
         plan = None
@@ -118,7 +124,7 @@ class DB(object):
 
     def create_table(self):
         # Create table
-        self.cur.execute('''CREATE TABLE IF NOT EXISTS results2
+        self.cur.execute('''CREATE TABLE IF NOT EXISTS results
                             (datetime text, job_duration real, trail_uuid text,
                             num_zhen_layers int, token_mixer text, input_features int, emb_dimensions int, output_per_ensemble int,
                             num_nodes int, gpus_per_node int, transport text,
@@ -139,7 +145,8 @@ class DB(object):
 
     def query_record(self, cluster_spec: ClusterSpec,
                      model_spec: Dict[str, Any], training_spec: TrainingSpec,
-                     parallel_spec: ParallelSpec) -> bool:
+                     parallel_spec: ParallelSpec,
+                     retry_failed: bool = False) -> bool:
         '''Query if the record exists. True for found; False for not found.'''
         model_spec_sql_val = model.to_sql_values(model_spec)
         cluster_spec_sql_val = cluster_spec.to_sql_values()
@@ -158,7 +165,9 @@ class DB(object):
                         {cluster_spec_sql_val},
                         {training_spec_sql_val},
                         {parallel_spec_sql_val}
-                      ) and avg IS NOT NULL'''
+                      )'''
+        if retry_failed:
+            sql_cmd += ' and avg IS NOT NULL'
 
         logger.debug(sql_cmd)
         return self.cur.execute(sql_cmd).fetchone() is not None

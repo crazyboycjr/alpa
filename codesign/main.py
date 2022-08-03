@@ -39,12 +39,16 @@ def add_args(parser):
         type=int,
         default='600',
         help='The timeout threshold in seconds for jobs using manual stage. (Default: 10min)')
+    parser.add_argument(
+        '--retry-failed',
+        action='store_true',
+        help='Whether to retry failed jobs in the results database.')
 
 
 def main(args):
     if args.search_model:
         import search
-        search.test()
+        model_specs = search.search_model()
         return
     
     # load config

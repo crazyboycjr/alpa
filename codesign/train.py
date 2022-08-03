@@ -25,7 +25,7 @@ def train_with_alpa(args, db: DB, cluster_spec: ClusterSpec,
     print_trial_specs(cluster_spec, model_spec, training_spec, parallel_spec)
 
     # skip if there is already such a record and the result is not empty
-    if db.query_record(cluster_spec, model_spec, training_spec, parallel_spec):
+    if db.query_record(cluster_spec, model_spec, training_spec, parallel_spec, args.retry_failed):
         logger.info("skipping the job because it's already been finished.")
         return
 
@@ -87,15 +87,30 @@ def train_with_alpa(args, db: DB, cluster_spec: ClusterSpec,
         job_id = uuid.uuid4()
 
         try:
+            # start timing
+            start = time.perf_counter()
+
+            # insert a record -- begin commit
+            db.save_record(job_id, cluster_spec, model_spec, training_spec,
+                           parallel_spec, parallel_method, alpa.global_config,
+                           None, None, None, None, start)
+
+            def save_timeout_record():
+                # sqlite does not allow to use db.conn from differnet connections... so create a one-time connection
+                db = DB(args.db)
+                db.save_record(job_id, cluster_spec, model_spec, training_spec,
+                               parallel_spec, parallel_method, alpa.global_config,
+                               None, None, None, f"Timeout, {args.manual_job_timeout} seconds exceeded", start)
+                # we have no other better way because NCCL might potentially hang and we have no way to clean the resource
+                # os.kill(os.getpid(), signal.SIGINT)
+                os._exit(1)
+
             # start ray cluster first
             start_ray_cluster(cluster_spec)
             time.sleep(1)
 
             # If timeout, we do not kill the job, we shutdown the ray cluster.
-            done, th = timeout_and_shutdown_ray_cluster(args.manual_job_timeout)
-
-            # start timing
-            start = time.perf_counter()
+            done, th = timeout_and_shutdown_ray_cluster(args.manual_job_timeout, save_timeout_record)
 
             # train
             latencies, memory, parallel_plan = train_torch_module(

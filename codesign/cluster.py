@@ -1,3 +1,4 @@
+from typing import Any, Optional, Callable, Tuple
 import threading
 import dataclasses
 from dataclasses import dataclass
@@ -7,6 +8,7 @@ import shlex
 import time
 
 import ray
+import alpa
 from serde import serde
 from log import logger
 
@@ -72,22 +74,37 @@ def wait_for_threads(ths):
 
 # shutdown ray on all machines
 def shutdown_ray_cluster():
+    alpa.api.is_initialized = False
+    logger.warn("shutting down the alpa global_cluster")
+    # Just nullify the objects instead of destroying the connections, the later does not help when the NCCL communicator
+    # it self hangs.
+    alpa.device_mesh.global_cluster = None
+    alpa.device_mesh.global_physical_mesh = None
+    alpa.device_mesh.global_virtual_physical_mesh = None
+    # alpa.device_mesh.shutdown_global_cluster()
+    logger.warn("disconnected from ray ")
     ray.shutdown()
+    logger.warn("shutting down ray")
 
     th_leader = []
     ths_follower = []
     cmd_leader = {
-        HEAD: [f"{RAY_PATH} stop --grace-period 10 --force"],
+        HEAD: [f"{RAY_PATH} stop --grace-period 10"],
     }
     cmd_follower = {}
     for w in FOLLOWERS:
-        cmd_follower[w] = [f"{RAY_PATH} stop --grace-period 10 --force"]
+        cmd_follower[w] = [f"{RAY_PATH} stop --grace-period 10"]
 
+    # submit the kill command to leader and follower nearly the same time (This is tricky, don't know else doesn't work)
     ssh_submit(cmd_follower, ths_follower)
-    wait_for_threads(ths_follower)
-
     ssh_submit(cmd_leader, th_leader)
+
+    # maybe try this https://www.geeksforgeeks.org/python-different-ways-to-kill-a-thread/
+    # but not guaranteed to work
+
+    wait_for_threads(ths_follower)
     wait_for_threads(th_leader)
+    logger.warn("shutting down ray finishes")
 
 
 def start_ray_cluster(cluster_spec: ClusterSpec):
@@ -109,6 +126,7 @@ def start_ray_cluster(cluster_spec: ClusterSpec):
         cmd_follower[FOLLOWERS[i - 1]] = [
             f"{RAY_PATH} start --num-gpus {cluster_spec.num_devices_per_host} --address=a8:6379"
         ]
+
     ssh_submit(cmd_leader, th_leader)
     wait_for_threads(th_leader)
 
@@ -122,17 +140,22 @@ def start_ray_cluster(cluster_spec: ClusterSpec):
     ray.init(address="auto", ignore_reinit_error=True)
 
 
-def timeout_and_shutdown_ray_cluster(timeout_secs) -> threading.Thread:
+def timeout_and_shutdown_ray_cluster(
+    timeout_secs: int, callback: Optional[Callable[[], Any]]
+) -> Tuple[threading.Event, threading.Thread]:
 
     def inner(e: threading.Event):
         start = time.time()
         while not e.isSet():
             time.sleep(1)
             if time.time() - start > timeout_secs:
+                logger.warn("trying to shut down the ray cluster")
+                if callback is not None:
+                    callback()
                 shutdown_ray_cluster()
                 return
 
     e = threading.Event()
-    th = threading.Thread(target=inner, args=(e, ))
+    th = threading.Thread(target=inner, args=(e,))
     th.start()
-    return e, th
+    return (e, th)
