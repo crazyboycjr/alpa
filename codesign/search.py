@@ -1,5 +1,6 @@
 """Search the model specifications."""
 import unittest
+import copy
 import random
 from typing import List, Sequence
 
@@ -9,8 +10,10 @@ from zhen import TokenMixer
 from model import ModelSpec
 
 global pbar
+BAR_FORMAT="{desc:<5.5}{percentage:3.0f}%|{bar:40}{r_bar}"
 
-def explode(placed: List[TokenMixer], last_op: int, num_ops: int, tokens: Sequence[TokenMixer]):
+def explode(placed: List[TokenMixer], last_op: int, num_ops: int,
+            tokens: Sequence[TokenMixer]):
     """Enumerate all the combinations of putting `num_ops` tokens, selected from `tokens`."""
     # print(placed, last_op, num_ops, tokens)
     if len(placed) == num_ops:
@@ -35,7 +38,7 @@ def dfs(ops: List[List[TokenMixer]], cur_layer: int, placed_ops: int,
     if cur_layer + 1 == num_layers:
         for layer_ops in explode([], 0, total_ops - placed_ops, tokens):
             ops[cur_layer] = layer_ops
-            result.append(ops)
+            result.append(copy.deepcopy(ops))
             pbar.update(1)
             # print(ops)
         return
@@ -43,7 +46,8 @@ def dfs(ops: List[List[TokenMixer]], cur_layer: int, placed_ops: int,
     for i in range(1, total_ops - placed_ops + 1):
         for layer_ops in explode([], 0, i, tokens):
             ops[cur_layer] = layer_ops
-            dfs(ops, cur_layer + 1, placed_ops + i, tokens, num_layers, total_ops, result)
+            dfs(ops, cur_layer + 1, placed_ops + i, tokens, num_layers,
+                total_ops, result)
 
 
 def search_model_fix_num_layers(tokens: Sequence[TokenMixer], num_layers: int,
@@ -60,7 +64,7 @@ def search_model_fix_num_layers(tokens: Sequence[TokenMixer], num_layers: int,
             'emb_dim': 160,
             'output_per_emb': 20,
             'num_zhen_layers': num_layers,
-            'tokens': ops,
+            'tokens': copy.copy(ops),
         }
         models.append(model_spec)
     return models
@@ -88,7 +92,8 @@ def count_candidates(tokens: Sequence[TokenMixer], max_layers: int,
             f[i][j] = g[i - 1][num_tokens] - g[i - 1][j - 1]
             g[i][j] = g[i][j - 1] + f[i][j]
 
-    def dfs_count(a: List[int], k: int, placed_ops: int, num_layers: int, total_ops: int, num_tokens: int) -> int:
+    def dfs_count(a: List[int], k: int, placed_ops: int, num_layers: int,
+                  total_ops: int, num_tokens: int) -> int:
         if total_ops - placed_ops < num_layers - k:
             return 0
 
@@ -99,7 +104,8 @@ def count_candidates(tokens: Sequence[TokenMixer], max_layers: int,
         s = 0
         for i in range(1, total_ops - placed_ops + 1):
             a[k] = i
-            s += dfs_count(a, k + 1, placed_ops + i, num_layers, total_ops, num_tokens)
+            s += dfs_count(a, k + 1, placed_ops + i, num_layers, total_ops,
+                           num_tokens)
         return s
 
     s = 0
@@ -109,8 +115,8 @@ def count_candidates(tokens: Sequence[TokenMixer], max_layers: int,
     return s
 
 
-
 class TestSearch(unittest.TestCase):
+
     def setUp(self):
         pass
 
@@ -122,7 +128,7 @@ class TestSearch(unittest.TestCase):
         num_candidates = count_candidates(tokens, 4, 12)
         print('num_candidates', num_candidates)
         global pbar
-        pbar = tqdm(total=num_candidates)
+        pbar = tqdm(total=num_candidates, bar_format=BAR_FORMAT)
 
         models = search_models(tokens, 4, 12)
         print(len(models))
@@ -130,7 +136,9 @@ class TestSearch(unittest.TestCase):
 
         pbar.close()
 
+
 def search_model() -> List[ModelSpec]:
+    # TODO(cjr): Remove convolution operator since alpa does not support it perfectly
     tokens = [
         TokenMixer.DOT, TokenMixer.LINEAR, TokenMixer.ATTENTION,
         TokenMixer.CONVOLUTION
@@ -138,7 +146,7 @@ def search_model() -> List[ModelSpec]:
     num_candidates = count_candidates(tokens, 4, 12)
     print('num_candidates', num_candidates)
     global pbar
-    pbar = tqdm(total=num_candidates)
+    pbar = tqdm(total=num_candidates, bar_format=BAR_FORMAT)
 
     models = search_models(tokens, 4, 12)
     print(len(models))

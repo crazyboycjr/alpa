@@ -110,7 +110,24 @@ def train_with_alpa(args, db: DB, cluster_spec: ClusterSpec,
             time.sleep(1)
 
             # If timeout, we do not kill the job, we shutdown the ray cluster.
-            done, th = timeout_and_shutdown_ray_cluster(args.manual_job_timeout, save_timeout_record)
+            if isinstance(parallel_method.stage_option, alpa.ManualStageOption):
+                logger.info(f"manual job timeout set to {args.manual_job_timeout} seconds")
+                done, th = timeout_and_shutdown_ray_cluster(args.manual_job_timeout, save_timeout_record)
+            else:
+                # calculate a expected timeout depending on the job scale
+                n = cluster_spec.num_gpus()
+                if n >= 64:
+                    timeout_secs = 6000
+                elif n >= 32:
+                    timeout_secs = 3000
+                elif n >= 16:
+                    timeout_secs = 2000
+                elif n >= 8:
+                    timeout_secs = 1500
+                else:
+                    timeout_secs = 1000
+                logger.info(f"auto search job timeout set to {timeout_secs} seconds")
+                done, th = timeout_and_shutdown_ray_cluster(timeout_secs, save_timeout_record)
 
             # train
             latencies, memory, parallel_plan = train_torch_module(
@@ -121,9 +138,10 @@ def train_with_alpa(args, db: DB, cluster_spec: ClusterSpec,
             # catch whatever exception
             logger.error(e)
             traceback.print_exc()
+            detailed_err = '{}\n{}'.format(e, traceback.format_exc())
             db.save_record(job_id, cluster_spec, model_spec, training_spec,
                            parallel_spec, parallel_method, alpa.global_config,
-                           None, None, None, e, start)
+                           None, None, None, detailed_err, start)
         else:
             db.save_record(job_id, cluster_spec, model_spec, training_spec,
                            parallel_spec, parallel_method, alpa.global_config,

@@ -49,6 +49,7 @@ def main(args):
     if args.search_model:
         import search
         model_specs = search.search_model()
+        print(model_specs)
         return
     
     # load config
