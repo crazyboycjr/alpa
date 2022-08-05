@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Tuple, List
 
+import jax.tree_util
 from serde import serde
 from serde.toml import from_toml
 
@@ -33,7 +34,8 @@ class Config(object):
         import alpa.torch.optim as torchoptim
 
         for c in self.model:
-            tokens = [get_token_mixer(t) for t in c['tokens']]
+            tokens = jax.tree_util.tree_map(get_token_mixer, c["tokens"])
+            print(tokens)
             model_spec = c.copy()
             model_spec['tokens'] = tokens
 

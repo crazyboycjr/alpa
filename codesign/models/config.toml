@@ -44,6 +44,12 @@ num_auto_layers = 4
 remat_layer = false
 
 [[parallel_spec]]
+description = "Auto search"
+num_micro_batches = [1, 2, 4]
+num_auto_layers = 2
+remat_layer = false
+
+[[parallel_spec]]
 description = "data parallel"
 num_micro_batches = [1]
 "(pp, dp, op)" = [1, 16, 1]

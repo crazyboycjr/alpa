@@ -32,7 +32,10 @@ def train_with_alpa(args, db: DB, cluster_spec: ClusterSpec,
     F = model_spec['num_features']
     D = model_spec['emb_dim']
     O = model_spec['output_per_emb']
-    L = model_spec['num_zhen_layers']
+    if isinstance(model_spec['tokens'][0], list):
+        L = len(model_spec['tokens'][-1])
+    else:
+        L = len(model_spec['tokens'])
     B = training_spec.global_batch_size
 
     # This style force the model to be created early, which compromise the purpose of deferred initialization

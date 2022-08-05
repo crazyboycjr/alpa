@@ -1,4 +1,5 @@
 """Search the model specifications."""
+from re import I
 import unittest
 import copy
 import random
@@ -7,10 +8,11 @@ from typing import List, Sequence
 from tqdm import tqdm
 
 from zhen import TokenMixer
-from model import ModelSpec
+from model import ModelSpec, create_model, get_token_mixer
 
 global pbar
-BAR_FORMAT="{desc:<5.5}{percentage:3.0f}%|{bar:40}{r_bar}"
+BAR_FORMAT = "{desc:<5.5}{percentage:3.0f}%|{bar:40}{r_bar}"
+
 
 def explode(placed: List[TokenMixer], last_op: int, num_ops: int,
             tokens: Sequence[TokenMixer]):
@@ -62,7 +64,7 @@ def search_model_fix_num_layers(tokens: Sequence[TokenMixer], num_layers: int,
         model_spec = {
             'num_features': 512,
             'emb_dim': 160,
-            'output_per_emb': 20,
+            'output_per_emb': 50,
             'num_zhen_layers': num_layers,
             'tokens': copy.copy(ops),
         }
@@ -137,11 +139,59 @@ class TestSearch(unittest.TestCase):
         pbar.close()
 
 
+def default_model_spec():
+    return {
+        'num_features':
+            512,
+        'emb_dim':
+            160,
+        'output_per_emb':
+            50,
+        'num_zhen_layers':
+            4,
+        'tokens': [
+            get_token_mixer(t)
+            for t in ["ATTENTION", "LINEAR", "ATTENTION", "DOT"]
+        ],
+    }
+
+
+def count_params(model_spec: ModelSpec) -> int:
+    m = create_model(model_spec)
+    total_params = sum(p.numel() for p in m.parameters())
+    return total_params
+
+
+def filter_models(models: Sequence[ModelSpec], diff_bound: float, count: int):
+    default_total_params = count_params(default_model_spec())
+    print("model_spec: {}, total_params {}".format(default_model_spec(),
+                                                   default_total_params))
+
+    # abs(a - b) / max(a, b) < 0.1
+    assert diff_bound >= 0.0 and diff_bound < 1.0
+
+    cnt = 0
+    for model_spec in models:
+        if cnt >= count:
+            break
+        total_params = count_params(model_spec)
+        a = total_params
+        b = default_total_params
+        diff = (a - b) / max(a, b)
+        if abs(diff) < diff_bound:
+            print("model_spec: {}, total_params {}, diff: {}".format(
+                model_spec, total_params, diff))
+            cnt += 1
+            yield model_spec
+
+
 def search_model() -> List[ModelSpec]:
     # TODO(cjr): Remove convolution operator since alpa does not support it perfectly
     tokens = [
-        TokenMixer.DOT, TokenMixer.LINEAR, TokenMixer.ATTENTION,
-        TokenMixer.CONVOLUTION
+        TokenMixer.DOT,
+        TokenMixer.LINEAR,
+        TokenMixer.ATTENTION,
+        # TokenMixer.CONVOLUTION
     ]
     num_candidates = count_candidates(tokens, 4, 12)
     print('num_candidates', num_candidates)
@@ -156,7 +206,12 @@ def search_model() -> List[ModelSpec]:
 
     # take the first 200 models candidates
     random.shuffle(models)
-    return models[:200]
+
+    ret = [default_model_spec()]
+    for model_spec in filter_models(models, 0.1, 10):
+        ret.append(model_spec)
+
+    return ret
 
 
 def suite():

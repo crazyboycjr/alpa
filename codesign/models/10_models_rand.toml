@@ -1,0 +1,101 @@
+[training_spec]
+avg_batch_size_per_device = 1024
+num_iters = 20
+
+[[cluster_spec]]
+num_hosts = 1
+num_devices_per_host = 8
+transport = "NVLink"
+
+[[cluster_spec]]
+num_hosts = 2
+num_devices_per_host = 8
+transport = "EFAx4"
+
+[[parallel_spec]]
+description = "data parallel"
+num_micro_batches = [1]
+"(pp, dp, op)" = [1, 8, 1]
+physical_mesh_shape = [1, 8]
+auto_sharding_option = { 'force_batch_dim_to_mesh_dim' = 0 }
+num_auto_layers = 1
+remat_layer = false
+
+[[parallel_spec]]
+description = "data parallel"
+num_micro_batches = [1]
+"(pp, dp, op)" = [1, 16, 1]
+physical_mesh_shape = [2, 8]
+auto_sharding_option = { 'force_batch_dim_to_mesh_dim' = 0 }
+num_auto_layers = 1
+remat_layer = false
+
+[[model]]
+num_features = 512
+emb_dim = 160
+output_per_emb = 20
+num_zhen_layers = 4
+tokens = [ [ "DOT", "ATTENTION",], [ "LINEAR",], [ "DOT", "DOT", "DOT", "ATTENTION",], [ "DOT", "DOT", "DOT", "LINEAR", "LINEAR",],]
+
+[[model]]
+num_features = 512
+emb_dim = 160
+output_per_emb = 20
+num_zhen_layers = 4
+tokens = [ [ "DOT", "LINEAR", "ATTENTION",], [ "ATTENTION", "ATTENTION", "ATTENTION",], [ "LINEAR", "ATTENTION",], [ "DOT", "LINEAR", "ATTENTION", "ATTENTION",],]
+
+[[model]]
+num_features = 512
+emb_dim = 160
+output_per_emb = 20
+num_zhen_layers = 4
+tokens = [ [ "DOT", "LINEAR", "LINEAR", "LINEAR",], [ "DOT", "LINEAR", "ATTENTION",], [ "DOT", "DOT", "ATTENTION", "ATTENTION",], [ "LINEAR",],]
+
+[[model]]
+num_features = 512
+emb_dim = 160
+output_per_emb = 20
+num_zhen_layers = 4
+tokens = [ [ "DOT", "LINEAR", "LINEAR", "LINEAR",], [ "DOT", "LINEAR",], [ "DOT", "LINEAR", "LINEAR", "LINEAR", "ATTENTION",], [ "ATTENTION",],]
+
+[[model]]
+num_features = 512
+emb_dim = 160
+output_per_emb = 20
+num_zhen_layers = 4
+tokens = [ [ "DOT", "DOT", "LINEAR",], [ "ATTENTION", "ATTENTION",], [ "LINEAR", "LINEAR",], [ "DOT", "DOT", "DOT", "ATTENTION", "ATTENTION",],]
+
+[[model]]
+num_features = 512
+emb_dim = 160
+output_per_emb = 20
+num_zhen_layers = 4
+tokens = [ [ "DOT", "DOT",], [ "DOT", "LINEAR", "LINEAR", "ATTENTION", "ATTENTION", "ATTENTION",], [ "DOT", "LINEAR",], [ "DOT", "DOT",],]
+
+[[model]]
+num_features = 512
+emb_dim = 160
+output_per_emb = 20
+num_zhen_layers = 4
+tokens = [ [ "DOT",], [ "ATTENTION", "ATTENTION",], [ "DOT", "ATTENTION", "ATTENTION", "ATTENTION",], [ "DOT", "DOT", "DOT", "DOT", "ATTENTION",],]
+
+[[model]]
+num_features = 512
+emb_dim = 160
+output_per_emb = 20
+num_zhen_layers = 4
+tokens = [ [ "DOT", "DOT", "DOT", "DOT", "LINEAR",], [ "ATTENTION", "ATTENTION",], [ "DOT", "DOT", "LINEAR", "ATTENTION",], [ "DOT",],]
+
+[[model]]
+num_features = 512
+emb_dim = 160
+output_per_emb = 20
+num_zhen_layers = 4
+tokens = [ [ "DOT", "ATTENTION", "ATTENTION",], [ "DOT", "DOT", "LINEAR", "LINEAR",], [ "LINEAR",], [ "DOT", "DOT", "DOT", "DOT",],]
+
+[[model]]
+num_features = 512
+emb_dim = 160
+output_per_emb = 20
+num_zhen_layers = 4
+tokens = [ [ "DOT", "DOT", "ATTENTION",], [ "DOT", "ATTENTION", "ATTENTION", "ATTENTION",], [ "DOT", "DOT", "LINEAR",], [ "LINEAR", "LINEAR",],]
