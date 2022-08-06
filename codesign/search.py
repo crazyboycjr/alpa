@@ -1,11 +1,13 @@
 """Search the model specifications."""
-from re import I
+from tokenize import Token
+from typing import List, Sequence, Callable
 import unittest
 import copy
 import random
-from typing import List, Sequence
+import itertools
 
 from tqdm import tqdm
+import jax.tree_util
 
 from zhen import TokenMixer
 from model import ModelSpec, create_model, get_token_mixer
@@ -52,6 +54,23 @@ def dfs(ops: List[List[TokenMixer]], cur_layer: int, placed_ops: int,
                 total_ops, result)
 
 
+def base_model_spec():
+    return {
+        'num_features':
+            512,
+        'emb_dim':
+            160,
+        'output_per_emb':
+            50,
+        'num_zhen_layers':
+            4,
+        'tokens': [
+            get_token_mixer(t)
+            for t in ["ATTENTION", "LINEAR", "ATTENTION", "DOT"]
+        ],
+    }
+
+
 def search_model_fix_num_layers(tokens: Sequence[TokenMixer], num_layers: int,
                                 total_ops: int) -> List[ModelSpec]:
     ops = [[] for _ in range(num_layers)]
@@ -59,15 +78,16 @@ def search_model_fix_num_layers(tokens: Sequence[TokenMixer], num_layers: int,
     dfs(ops, 0, 0, tokens, num_layers, total_ops, result)
 
     models = []
+
+    base_spec = base_model_spec()
+
     for ops in result:
         # construct a model_spec
-        model_spec = {
-            'num_features': 512,
-            'emb_dim': 160,
-            'output_per_emb': 50,
-            'num_zhen_layers': num_layers,
+        model_spec = copy.copy(base_spec)
+        model_spec.update({
+            'num_zhen_layers': len(ops),
             'tokens': copy.copy(ops),
-        }
+        })
         models.append(model_spec)
     return models
 
@@ -117,72 +137,147 @@ def count_candidates(tokens: Sequence[TokenMixer], max_layers: int,
     return s
 
 
-class TestSearch(unittest.TestCase):
-
-    def setUp(self):
-        pass
-
-    def test1(self):
-        tokens = [
-            TokenMixer.DOT, TokenMixer.LINEAR, TokenMixer.ATTENTION,
-            TokenMixer.CONVOLUTION
-        ]
-        num_candidates = count_candidates(tokens, 4, 12)
-        print('num_candidates', num_candidates)
-        global pbar
-        pbar = tqdm(total=num_candidates, bar_format=BAR_FORMAT)
-
-        models = search_models(tokens, 4, 12)
-        print(len(models))
-        assert num_candidates == len(models)
-
-        pbar.close()
-
-
-def default_model_spec():
-    return {
-        'num_features':
-            512,
-        'emb_dim':
-            160,
-        'output_per_emb':
-            50,
-        'num_zhen_layers':
-            4,
-        'tokens': [
-            get_token_mixer(t)
-            for t in ["ATTENTION", "LINEAR", "ATTENTION", "DOT"]
-        ],
-    }
-
-
 def count_params(model_spec: ModelSpec) -> int:
     m = create_model(model_spec)
     total_params = sum(p.numel() for p in m.parameters())
     return total_params
 
 
-def filter_models(models: Sequence[ModelSpec], diff_bound: float, count: int):
-    default_total_params = count_params(default_model_spec())
-    print("model_spec: {}, total_params {}".format(default_model_spec(),
-                                                   default_total_params))
+class ModelFilter(object):
+
+    def __init__(self, models: Sequence[ModelSpec],
+                 filters: Sequence[Callable[[ModelSpec], bool]]):
+        self.models = models
+        self.filters = filters
+
+    def iter(self):
+        for model_spec in self.models:
+            if all(f(model_spec) for f in self.filters):
+                print('find a solution:', model_spec)
+                yield model_spec
+
+
+def fixed_num_layer(num_layers: int) -> Callable[[ModelSpec], bool]:
+
+    def inner(model_spec: ModelSpec) -> bool:
+        return num_layers == model_spec['num_zhen_layers']
+
+    return inner
+
+
+def similar_parameter_count(base_count: int,
+                            diff_bound: float) -> Callable[[ModelSpec], bool]:
+    """Filter models whose difference in parameter count with the default model is within diff_bound."""
 
     # abs(a - b) / max(a, b) < 0.1
     assert diff_bound >= 0.0 and diff_bound < 1.0
 
-    cnt = 0
-    for model_spec in models:
-        if cnt >= count:
-            break
+    def inner(model_spec: ModelSpec) -> bool:
         total_params = count_params(model_spec)
         a = total_params
-        b = default_total_params
+        b = base_count
         diff = (a - b) / max(a, b)
         if abs(diff) < diff_bound:
             print("model_spec: {}, total_params {}, diff: {}".format(
                 model_spec, total_params, diff))
-            cnt += 1
-            yield model_spec
+            return True
+        else:
+            print("model_spec: {}, total_params {}, diff: {}, skipped".format(
+                model_spec, total_params, diff))
+            return False
+
+    return inner
+
+
+def uniform_token_mixer(token: TokenMixer) -> Callable[[ModelSpec], bool]:
+    """Filter the models whose token mixer are all `token`"""
+
+    def inner(model_spec: ModelSpec) -> bool:
+        return all(t == token
+                   for t in jax.tree_util.tree_flatten(model_spec['tokens'])[0])
+
+    return inner
+
+def add_dot_models(ret: List[ModelSpec], models: Sequence[ModelSpec]):
+    default_total_params = count_params(base_model_spec())
+    print("model_spec: {}, total_params {}".format(base_model_spec(),
+                                                   default_total_params))
+
+    ret.append(base_model_spec())
+
+    model_filter = ModelFilter(models, [
+        uniform_token_mixer(TokenMixer.DOT),
+        similar_parameter_count(default_total_params, 0.1)
+    ])
+    for model_spec in itertools.islice(model_filter.iter(), 10):
+        ret.append(model_spec)
+
+    model_filter = ModelFilter(models, [
+        fixed_num_layer(1),
+        uniform_token_mixer(TokenMixer.DOT),
+        similar_parameter_count(default_total_params, 0.1),
+    ])
+    for model_spec in itertools.islice(model_filter.iter(), 2):
+        ret.append(model_spec)
+
+    model_filter = ModelFilter(models, [
+        fixed_num_layer(2),
+        uniform_token_mixer(TokenMixer.DOT),
+        similar_parameter_count(default_total_params, 0.1),
+    ])
+    for model_spec in itertools.islice(model_filter.iter(), 2):
+        ret.append(model_spec)
+
+    model_filter = ModelFilter(models, [
+        fixed_num_layer(3),
+        uniform_token_mixer(TokenMixer.DOT),
+        similar_parameter_count(default_total_params, 0.1),
+    ])
+    for model_spec in itertools.islice(model_filter.iter(), 2):
+        ret.append(model_spec)
+
+
+def add_attention_models(ret: List[ModelSpec], models: Sequence[ModelSpec]):
+    # try model consists of pure attention layers
+    base_attention_model = base_model_spec()
+    base_attention_model["tokens"] = [
+        TokenMixer.ATTENTION
+        for _ in range(base_attention_model["num_zhen_layers"])
+    ]
+    default_total_params = count_params(base_attention_model)
+    print("model_spec: {}, total_params {}".format(base_attention_model,
+                                                   default_total_params))
+
+    ret.append(base_attention_model)
+
+    model_filter = ModelFilter(models, [
+        uniform_token_mixer(TokenMixer.ATTENTION),
+        similar_parameter_count(default_total_params, 0.1)
+    ])
+    for model_spec in itertools.islice(model_filter.iter(), 10):
+        ret.append(model_spec)
+
+
+def add_linear_models(ret: List[ModelSpec], models: Sequence[ModelSpec]):
+    # try model consists of pure linear layers
+    base_linear_model = base_model_spec()
+    base_linear_model["tokens"] = [
+        TokenMixer.LINEAR
+        for _ in range(base_linear_model["num_zhen_layers"])
+    ]
+    default_total_params = count_params(base_linear_model)
+    print("model_spec: {}, total_params {}".format(base_linear_model,
+                                                   default_total_params))
+
+    ret.append(base_linear_model)
+
+    model_filter = ModelFilter(models, [
+        uniform_token_mixer(TokenMixer.LINEAR),
+        similar_parameter_count(default_total_params, 0.1)
+    ])
+    for model_spec in itertools.islice(model_filter.iter(), 10):
+        ret.append(model_spec)
+
 
 
 def search_model() -> List[ModelSpec]:
@@ -207,11 +302,35 @@ def search_model() -> List[ModelSpec]:
     # take the first 200 models candidates
     random.shuffle(models)
 
-    ret = [default_model_spec()]
-    for model_spec in filter_models(models, 0.1, 10):
-        ret.append(model_spec)
+    ret = []
+
+    add_dot_models(ret, models)
+    add_attention_models(ret, models)
+    add_linear_models(ret, models)
 
     return ret
+
+
+class TestSearch(unittest.TestCase):
+
+    def setUp(self):
+        pass
+
+    def test1(self):
+        tokens = [
+            TokenMixer.DOT, TokenMixer.LINEAR, TokenMixer.ATTENTION,
+            TokenMixer.CONVOLUTION
+        ]
+        num_candidates = count_candidates(tokens, 4, 12)
+        print('num_candidates', num_candidates)
+        global pbar
+        pbar = tqdm(total=num_candidates, bar_format=BAR_FORMAT)
+
+        models = search_models(tokens, 4, 12)
+        print(len(models))
+        assert num_candidates == len(models)
+
+        pbar.close()
 
 
 def suite():
