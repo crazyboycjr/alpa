@@ -78,7 +78,7 @@ if __name__ == '__main__':
     # os.environ["NVIDIA_TF32_OVERRIDE"] = "0"
     # parse args
     parser = argparse.ArgumentParser(
-        description="allreduce completion time calculator",
+        description="ZHEN codesign toolkit.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     add_args(parser)
