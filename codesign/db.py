@@ -197,7 +197,7 @@ class DB(object):
         else:
             avg_lat = med_lat = p90_lat = 'NULL'
         max_memory = memory if memory is not None else 'NULL'
-        error = f'"{str(error)}"' if error is not None else 'NULL'
+        # error = f'"{str(error)}"' if error is not None else 'NULL'
 
         all_configs = get_all_configs(parallel_method, parallel_plan,
                                       alpa_global_config)
@@ -209,12 +209,12 @@ class DB(object):
                         {training_spec_sql_val},
                         {parallel_spec_sql_val},
                         {avg_lat}, {med_lat}, {p90_lat}, {max_memory},
-                        {error},
+                        ?,
                         ?
                       )'''
 
         logger.debug(sql_cmd)
-        self.cur.execute(sql_cmd, (all_configs,))
+        self.cur.execute(sql_cmd, (error, all_configs))
 
         # Save (commit) the changes
         self.con.commit()

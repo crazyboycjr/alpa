@@ -198,6 +198,41 @@ def uniform_token_mixer(token: TokenMixer) -> Callable[[ModelSpec], bool]:
 
     return inner
 
+def add_similar_models(ret: List[ModelSpec], models: Sequence[ModelSpec]):
+    default_total_params = count_params(base_model_spec())
+    print("model_spec: {}, total_params {}".format(base_model_spec(),
+                                                   default_total_params))
+
+    ret.append(base_model_spec())
+
+    model_filter = ModelFilter(models, [
+        similar_parameter_count(default_total_params, 0.1)
+    ])
+    for model_spec in itertools.islice(model_filter.iter(), 100):
+        ret.append(model_spec)
+
+    model_filter = ModelFilter(models, [
+        fixed_num_layer(1),
+        similar_parameter_count(default_total_params, 0.1),
+    ])
+    for model_spec in itertools.islice(model_filter.iter(), 20):
+        ret.append(model_spec)
+
+    model_filter = ModelFilter(models, [
+        fixed_num_layer(2),
+        similar_parameter_count(default_total_params, 0.1),
+    ])
+    for model_spec in itertools.islice(model_filter.iter(), 20):
+        ret.append(model_spec)
+
+    model_filter = ModelFilter(models, [
+        fixed_num_layer(3),
+        similar_parameter_count(default_total_params, 0.1),
+    ])
+    for model_spec in itertools.islice(model_filter.iter(), 20):
+        ret.append(model_spec)
+
+
 def add_dot_models(ret: List[ModelSpec], models: Sequence[ModelSpec]):
     default_total_params = count_params(base_model_spec())
     print("model_spec: {}, total_params {}".format(base_model_spec(),
@@ -304,9 +339,10 @@ def search_model() -> List[ModelSpec]:
 
     ret = []
 
-    add_dot_models(ret, models)
-    add_attention_models(ret, models)
-    add_linear_models(ret, models)
+    # add_dot_models(ret, models)
+    # add_attention_models(ret, models)
+    # add_linear_models(ret, models)
+    add_similar_models(ret, models)
 
     return ret
 

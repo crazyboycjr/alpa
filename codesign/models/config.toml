@@ -29,80 +29,80 @@ transport = "NVLink"
 [[cluster_spec]]
 num_hosts = 2
 num_devices_per_host = 8
-transport = "EFAx4"
-# transport = "TCPx4"
+# transport = "EFAx4"
+transport = "TCPx4"
 
 [[cluster_spec]]
 num_hosts = 8
 num_devices_per_host = 8
 transport = "EFAx4"
 
-[[parallel_spec]]
-description = "Auto search"
-num_micro_batches = [1, 2, 4]
-num_auto_layers = 4
-remat_layer = false
-
-[[parallel_spec]]
-description = "Auto search"
-num_micro_batches = [1, 2, 4]
-num_auto_layers = 2
-remat_layer = false
-
-[[parallel_spec]]
-description = "data parallel"
-num_micro_batches = [1]
-"(pp, dp, op)" = [1, 16, 1]
-physical_mesh_shape = [2, 8]
-auto_sharding_option = { 'force_batch_dim_to_mesh_dim' = 0 }
-num_auto_layers = 1
-remat_layer = false
-
-[[parallel_spec]]
-description = "data parallel"
-num_micro_batches = [1]
-"(pp, dp, op)" = [1, 64, 1]
-physical_mesh_shape = [8, 8]
-auto_sharding_option = { 'force_batch_dim_to_mesh_dim' = 0 }
-num_auto_layers = 1
-remat_layer = false
-
-# incompatible shapes before, removing conv2d works around this issue
-[[parallel_spec]]
-description = "two nodes, within each node running operator parallel"
-# num_micro_batches = [1, 2, 4, 8]
-num_micro_batches = [8]
-"(pp, dp, op)" = [1, 2, 8]
-physical_mesh_shape = [2, 8]
-num_auto_layers = 1
-remat_layer = false
-
-# failed: never finish the first iteration
-[[parallel_spec]]
-description = "Example #2: intra-numa-node (4 gpus) operator parallel, cross-numa and cross-machine pipeline"
-num_micro_batches = [1, 2, 4, 8, 16]
-"(pp, dp, op)" = [4, 1, 4]
-physical_mesh_shape = [1, 4]
-num_auto_layers = 4
-remat_layer = false
-
-# This plan looks not bad
-[[parallel_spec]]
-description = "Example #4: data-parallel across numa-nodes, tensor-parallel within a numa-node"
-num_micro_batches = [1, 2, 4]
-"(pp, dp, op)" = [1, 4, 4]
-physical_mesh_shape = [2, 8]
-num_auto_layers = 1
-remat_layer = false
-
-# failed: never finish the first iteration
-[[parallel_spec]]
-description = "Example #5.1: data parallel + cross-machine pipeline parallel"
-num_micro_batches = [1, 2, 4]
-"(pp, dp, op)" = [4, 4, 1]
-physical_mesh_shape = [1, 4]
-num_auto_layers = 4
-remat_layer = false
+# [[parallel_spec]]
+# description = "Auto search"
+# num_micro_batches = [1, 2, 4]
+# num_auto_layers = 4
+# remat_layer = false
+# 
+# [[parallel_spec]]
+# description = "Auto search"
+# num_micro_batches = [1, 2, 4]
+# num_auto_layers = 2
+# remat_layer = false
+# 
+# [[parallel_spec]]
+# description = "data parallel"
+# num_micro_batches = [1]
+# "(pp, dp, op)" = [1, 16, 1]
+# physical_mesh_shape = [2, 8]
+# auto_sharding_option = { 'force_batch_dim_to_mesh_dim' = 0 }
+# num_auto_layers = 1
+# remat_layer = false
+# 
+# [[parallel_spec]]
+# description = "data parallel"
+# num_micro_batches = [1]
+# "(pp, dp, op)" = [1, 64, 1]
+# physical_mesh_shape = [8, 8]
+# auto_sharding_option = { 'force_batch_dim_to_mesh_dim' = 0 }
+# num_auto_layers = 1
+# remat_layer = false
+# 
+# # incompatible shapes before, removing conv2d works around this issue
+# [[parallel_spec]]
+# description = "two nodes, within each node running operator parallel"
+# # num_micro_batches = [1, 2, 4, 8]
+# num_micro_batches = [8]
+# "(pp, dp, op)" = [1, 2, 8]
+# physical_mesh_shape = [2, 8]
+# num_auto_layers = 1
+# remat_layer = false
+# 
+# # failed: never finish the first iteration
+# [[parallel_spec]]
+# description = "Example #2: intra-numa-node (4 gpus) operator parallel, cross-numa and cross-machine pipeline"
+# num_micro_batches = [1, 2, 4, 8, 16]
+# "(pp, dp, op)" = [4, 1, 4]
+# physical_mesh_shape = [1, 4]
+# num_auto_layers = 4
+# remat_layer = false
+# 
+# # This plan looks not bad
+# [[parallel_spec]]
+# description = "Example #4: data-parallel across numa-nodes, tensor-parallel within a numa-node"
+# num_micro_batches = [1, 2, 4]
+# "(pp, dp, op)" = [1, 4, 4]
+# physical_mesh_shape = [2, 8]
+# num_auto_layers = 1
+# remat_layer = false
+# 
+# # failed: never finish the first iteration
+# [[parallel_spec]]
+# description = "Example #5.1: data parallel + cross-machine pipeline parallel"
+# num_micro_batches = [1, 2, 4]
+# "(pp, dp, op)" = [4, 4, 1]
+# physical_mesh_shape = [1, 4]
+# num_auto_layers = 4
+# remat_layer = false
 
 # This plan looks not bad
 [[parallel_spec]]
@@ -110,16 +110,17 @@ description = "Example #5.2: data parallel + intra-machine pipeline parallel"
 num_micro_batches = [1, 2, 4]
 "(pp, dp, op)" = [4, 4, 1]
 host_ids = [[0, 1], [0, 1], [0, 1], [0, 1]]
-device_ids = [[[0, 4], [0, 4]], [[3, 7], [3, 7]], [[2, 6], [2, 6]], [[1, 5], [1, 5]]]
+# device_ids = [[[0, 4], [0, 4]], [[3, 7], [3, 7]], [[2, 6], [2, 6]], [[1, 5], [1, 5]]]
+device_ids = [[[0, 2], [0, 2]], [[1, 3], [1, 3]], [[4, 6], [4, 6]], [[5, 7], [5, 7]]]
 num_auto_layers = 4
 remat_layer = false
 
-# this looks suboptimal
-# failed: assert tuple(expected_microbatched_shape) == microbatch_shape, AssertionError: (1, 128) vs (128,)
-[[parallel_spec]]
-description = "two gpus a group, each group in charge of a pipeline stage (8 stages)"
-num_micro_batches = [1, 2, 4, 8, 16]
-"(pp, dp, op)" = [8, 1, 2]
-physical_mesh_shape = [1, 2]
-num_auto_layers = 8
-remat_layer = false
+# # this looks suboptimal
+# # failed: assert tuple(expected_microbatched_shape) == microbatch_shape, AssertionError: (1, 128) vs (128,)
+# [[parallel_spec]]
+# description = "two gpus a group, each group in charge of a pipeline stage (8 stages)"
+# num_micro_batches = [1, 2, 4, 8, 16]
+# "(pp, dp, op)" = [8, 1, 2]
+# physical_mesh_shape = [1, 2]
+# num_auto_layers = 8
+# remat_layer = false
