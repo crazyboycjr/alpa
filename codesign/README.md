@@ -22,8 +22,7 @@ optional arguments:
 ## Motivation
 There is little _low-hanging_ fruit in improving DHEN’s training performance for single and multiple GPU scenario. However, both macro and micro architecture affect the performance even if the parameter count remain the same. To further exploit DHEN’s training performance, we seek to model and software codesign. Taking advantage of Alpa, a state-of-the-art 3D parallelism runtime, we can explore the design space of DHEN in regard to performance through automated search.
 
-This codesign toolkit is our first step towards this automated
-architecture search.
+We design a toolkit to enforce this codesign search and gained some preliminary results. By searching for and trying out only a few alternative models to the baseline DHEN, we can easily find some candidates whose training speed is *3x* faster than the baseline DHEN. Whether these architectures are reasonable requires further in-depth analysis.
 
 
 ## Define and genrate model search space
