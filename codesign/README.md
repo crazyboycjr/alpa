@@ -20,7 +20,7 @@ optional arguments:
 ```
 
 ## Motivation
-There is little low-hanging fruit in improving DHEN’s training performance for single and multiple GPU scenario. However, both macro and micro architecture affect the performance even if the parameter count remain the same. To further exploit DHEN’s training performance, we seek to model and software codesign. Taking advantage of Alpa, a state-of-the-art 3D parallelism runtime, we can explore the design space of DHEN in regard to performance through automated search.
+There is little _low-hanging_ fruit in improving DHEN’s training performance for single and multiple GPU scenario. However, both macro and micro architecture affect the performance even if the parameter count remain the same. To further exploit DHEN’s training performance, we seek to model and software codesign. Taking advantage of Alpa, a state-of-the-art 3D parallelism runtime, we can explore the design space of DHEN in regard to performance through automated search.
 
 This codesign toolkit is our first step towards this automated
 architecture search.
@@ -33,7 +33,7 @@ python3 codesign/main.py --search-model
 ```
 This will generate a list of model specs and print them to stdout. You
 can manually copy or redirect the output to a file to create the
-configuration. Please look at `models/config.toml` for an example of
+configuration. Please look at `models/config.toml` for an examplar
 configuration file. See `search.py` for more details about enumerating
 and filtering the model candidates. To change the filtering criteria or
 enlarging the search space, you will need to modify this file.
@@ -41,7 +41,7 @@ enlarging the search space, you will need to modify this file.
 ## Enumerate training execution space
 The enumration is implemented in `main.py` and `config.py`. In short,
 for each `model`, it enumerates all the 'matched' combination of
-`cluster_spec` and `parallel_spec` and run the model and with the
+`cluster_spec` and `parallel_spec` and run the model with the
 execution configuration (A `cluster_spec` and a `parallel_spec` do not match
 when they target for different number of GPUs.).
 
@@ -61,11 +61,11 @@ to make it retry the enumerated but once failed configurations.
 All the specifications, runtime/global configurations, environment
 variables, results, and errors are recorded in a SQLite database.
 You can use `sqlite3 results.db` to connect to the database and use SQL
-commands to inspect it. It is recommended to [DB Browser for
+commands to inspect it. It is recommended to take a look at [DB Browser for
 SQLite](https://sqlitebrowser.org/) which I personally found very
 convenient to browse and edit the record (e.g., deleting a particular
 list of failed jobs so that you can rerun your script to retry those jobs).
 
-You can alos use `export_all.sh` or `export_succeded.sh` to export the
-database to csv which you can upload to online spreadsheet for processing
-and sharing.
+You can also use `export_all.sh` or `export_succeded.sh` to export the
+database to CSV so that to upload to online spreadsheet for further
+processing and sharing.
